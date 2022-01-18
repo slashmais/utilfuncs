@@ -115,7 +115,7 @@ bool checkkeypress(int k);
 
 bool askpass(std::string &pw); //cli-only
 
-#if defined(PLATFORM_POSIX) || defined(__linux__)
+#if defined(PLATFORM_POSIX) || defined(__linux__) || defined(unix) || defined(__unix__) || defined(__unix)
 bool validate_app_path(std::string sFP, std::string &sRet);
 #endif
 
@@ -132,7 +132,7 @@ void kill_self();
 bool kill_app(const std::string &spath);
 
 
-#if defined(PLATFORM_POSIX) || defined(__linux__)
+#if defined(PLATFORM_POSIX) || defined(__linux__) || defined(unix) || defined(__unix__) || defined(__unix)
 	int realuid();
 	int effectiveuid();
 	bool has_root_access();
@@ -312,7 +312,7 @@ void TRIM(std::string& s, const char *sch=WHITESPACE_CHARS);
 void ReplacePhrase(std::string &sTarget, const std::string &sPhrase, const std::string &sReplacement); //each occ of phrase with rep
 void ReplaceChars(std::string &sTarget, const std::string &sChars, const std::string &sReplacement); //each occ of each char from chars with rep
 const std::string SanitizeName(const std::string &sp); //replaces non-alphanums with underscores
-//=====
+
 
 const std::string ucase(const char *sz);
 const std::string lcase(const char *sz);
@@ -579,7 +579,7 @@ bool isdirempty(const std::string &D); //also false if D does not exist, or cann
 bool realizetree(const std::string &sdir, DirTree &tree); //creates dirs-only (?? cwd? or sdir must be abs?)
 const std::string getrelativepathname(const std::string &sroot, const std::string &spath); //empty if spath not subdir of sroot
 
-#if defined(PLATFORM_POSIX) || defined(__linux__)
+#if defined(PLATFORM_POSIX) || defined(__linux__) || defined(unix) || defined(__unix__) || defined(__unix)
 	const std::string getlinktarget(const std::string &slnk);
 #endif
 
@@ -614,7 +614,7 @@ DTStamp get_dtmodified(const std::string sf);
 const std::string get_owner(const std::string sf);
 
 //permissions & rights..
-int getpermissions(const std::string sN); //for object (owner,group,others)
+int getpermissions(const std::string sN); //format:777; see getstatx
 bool setpermissions(const std::string sN, int prms, bool bDeep=false); //deep=>recursively if sN is a directory
 //set_uid
 //set_gid
@@ -1321,7 +1321,7 @@ template<typename T> concept bool IsCon() { return (std::is_convertible<T, std::
 
 template<CpCon T, IsCon U=std::string> struct Share
 {
-	typedef T* Share_Type;
+	using Share_Type=T*;
 	typedef U Key_Type;
 	std::mutex MUX_SHARE;
 
@@ -1515,14 +1515,14 @@ struct Storage //container for mixed types
 
 
 //===================================================================================================
-#if defined(PLATFORM_POSIX) || defined(__linux__)
+#if defined(PLATFORM_POSIX) || defined(__linux__) || defined(unix) || defined(__unix__) || defined(__unix)
 template<typename...T> void _S_R_A_(const std::string &sc)
 	{
 		std::string s{};
 		s=says("nohup ", sc, " 1&2>/dev/null &");
 		std::system(s.c_str());
 	}
-#else
+#elif defined(_WIN64)
 template<typename...T> void _S_R_A_(const std::string &sc) //assuming windows - NOT TESTED!
 	{
 		std::string s{};
