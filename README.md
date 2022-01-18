@@ -1,15 +1,15 @@
 # utilfuncs
 
-General-use utility functions
-(live-code updated occasionally)
+General-use utility functions<br />
+(live-code updated occasionally)<br />
 
-Intended for cross-platform use...
-(The functions have not been (fully) tested on windows (64-bit), only on linux.)
-If you use this pls let me know of fixes & improvements...
+Intended for cross-platform use...<br />
+(The functions have not been (fully) tested on windows (64-bit), only on linux.)<br />
+If you use this pls let me know of fixes & improvements...<br />
 
-Functions for:
-  string-manipulation
-  filesystem-access
-  parsing/tokenizing
-  ... and a lot more (browse it to see)...
+Functions for:<br />
+  string-manipulation<br />
+  filesystem-access<br />
+  parsing/tokenizing<br />
+  ... and a lot more (browse it to see)...<br />
 
