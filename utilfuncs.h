@@ -44,21 +44,80 @@ namespace FSYS=std::filesystem;
 //#include <experimental/filesystem> //NB: need to link with libstdc++fs
 //namespace FSYS=std::experimental::filesystem;
 
-//--------------------------------------------------------------------------------------------------
-struct VSTR : public std::vector<std::string>
+//--------------------------------------------------------------------------------------------------Generic Vector
+enum { SORT_NONE, SORT_ASC, SORT_DESC, };
+template<typename T> struct VType : public std::vector<T>
 {
-	template<typename...S> VSTR& set(S...s) { clear(); std::vector<std::string> v{s...}; for (auto ss:v) this->push_back(ss); return *this;}
-	virtual ~VSTR() { clear(); }
-	VSTR()  { clear(); }
-	template<typename...S> VSTR(S...s) { set(s...); }
-	//VSTR(const VSTR &V) { *this=V; }
-	//VSTR operator=(const VSTR &V) { clear(); for (auto s:V) Add(s); return *this; }
-	bool Has(const std::string &s);
-	void Add(const std::string &s) { if (!s.empty()&&!Has(s)) push_back(s); }
-	void Drop(const std::string &s);
+	//generic vec to supply Add(), Set(), Has(), Drop(), use variadics & optional sort, optional unique
+	
+	using VT=std::vector<T>;
+	int sorder{SORT_NONE}; //NB: to use sort: operators <() and >() must be defined on T
+	bool bunique{false}; //strip dupes
+	void clear()				{ VT::clear(); }
+	bool empty()				{ return VT::empty(); }
+	virtual ~VType()			{ clear(); }
+	VType()						{ clear(); }
+	VType<T>& setsortorder(int order)
+		{
+			if ((order>=0)&&(order<=SORT_DESC)&&(order!=sorder))
+			{
+				sorder=order;
+				if (!empty()) *this=VT(*this);
+			}
+			return *this;
+		}
+	VType<T>& setunique(bool b=true)
+		{
+			bool bb=(b&&!bunique);
+			bunique=b;
+			if (bb&&!empty()) *this=VT(*this);
+			return *this;
+		}
+	void push_back(const T &t)
+		{
+			if (VT::empty()||(!bunique&&(sorder==SORT_NONE))) { VT::push_back(t); return; }
+			auto cmp=[this](const T &l, const T &r)->int
+				{
+					if (bunique&&(l==r)) return (-1);
+					if (sorder==SORT_ASC) return (l>r)?1:0;
+					return (l<r)?1:0;
+				};
+			int p{0};
+			auto it=VT::begin();
+			while (it!=VT::end()) { if (!(p=cmp((*it), t))) it++; else break; }
+			if (p>=0) VT::insert(it, t);
+		}
+	bool Has(const T &t) const	{ for (auto e:(*this)) { if (e==t) return true; } return false; }
+	void Add(const T &t) { this->push_back(t); }
+	void Add(const VType<T> &V)					{ for (auto e:V) Add(e); }					//insert/append content from vec
+	VType<T>& operator=(const std::vector<T> &V) { clear();
+	 Add(V);
+	  return *this; }			//replace content from vec
+	VType<T>& operator=(const VType<T> &V)		{ clear();
+	 sorder=V.sorder;
+	  Add(V);
+	   return *this; }		//replace content from vec
+	template<typename...P> void Add(P...p)		{ VT v{p...}; for (auto pp:v) Add(pp); }	//insert/append content from variadic
+	template<typename...P> VType<T>& Set(P...p)	{ clear(); (Add(p...)); return *this;}		//replace content from variadic
+	template<typename...P> VType(P...p)			{ clear(); Set(p...); }						//variadic ctor
+	VType(const VType<T> &V)					{ *this=V; }								//copy ctor
+	bool Drop(const T &t)
+		{
+			auto it=VT::begin();
+			while (it!=VT::end()) { if ((*it)==t) { VT::erase(it); return true; } it++; }
+			return false;
+		}
+	void DropAll(const T &t)
+		{
+			auto it=VT::begin();
+			while (it!=VT::end()) { if ((*it)==t) { VT::erase(it++); } else it++; }
+		}
 };
 
-struct MSTR : std::map<std::string, std::string> //[skey]=svalue
+typedef VType<std::string> VSTR; //most-used vector-type
+
+//--------------------------------------------------------------------------------------------------Generic Map
+struct MSTR : std::map<std::string, std::string>
 {
 	virtual ~MSTR() { clear(); }
 	MSTR()  { clear(); }
@@ -70,7 +129,7 @@ struct MSTR : std::map<std::string, std::string> //[skey]=svalue
 	void Set(const std::string &sk, const std::string &sv) { if (!sk.empty()) (*this)[sk]=sv; } //add/replace value
 };
 
-struct MVSTR : std::map<std::string, VSTR>
+struct MVSTR : std::map<std::string, VSTR >
 {
 	virtual ~MVSTR() { clear(); }
 	MVSTR()  { clear(); }
@@ -166,6 +225,7 @@ inline int trace_sequence() { static int ts{0}; ++ts; return ts; }
 template<typename...P> void trace(P...p)
 	{
 		//call with: "trace( WAI, rest, of, info);" -- will give location via wai-data
+		// - trace_to_log() - without the PRINTSTRING() is better -
 		std::string r{};
 		std::stringstream ss("");
 		(ss<<...<<p);
@@ -175,7 +235,7 @@ template<typename...P> void trace(P...p)
 	}
 template<typename...P> void trace_to_log(P...p) //THIS IS THE BEST DEBUGGING-HELPER-FUNCTION I HAVE EVER WRITTEN!
 	{
-		//call with: "trace_to_log(WAI, rest, of, info);" -- will give location via wai-data
+		//*** call with: "trace_to_log(WAI, rest, of, info);" -- will give location via wai-data ***
 		std::string r{};
 		std::stringstream ss("");
 		(ss<<...<<p);
@@ -439,7 +499,7 @@ size_t splitslist(const std::string &list, const std::string &delim, VSTR &vs, b
 //size_t splitqslist(const std::string &list, char delim, VSTR &vs, bool bIncEmpty); todo...
 void splitslen(const std::string &src, size_t len, VSTR &vs); //copy len-sized substrings from s to vs
 void splitslr(std::string s, char cdiv, std::string &l, std::string &r); //split s on first cdiv into l & r
-void splitslr(std::string s, std::string sdiv, std::string &l, std::string &r); //split s on first sdiv into l & r
+void splitslr(std::string s, const std::string &sdiv, std::string &l, std::string &r); //split s on first sdiv into l & r
 
 
 //--------------------------------------------------------------------------------------------------

@@ -46,9 +46,6 @@
 #endif
 
 //--------------------------------------------------------------------------------------------------
-bool VSTR::Has(const std::string &s) { if (size()>0) { for (auto e:(*this)) if (seqs(e, s)) return true; } return false; }
-void VSTR::Drop(const std::string &s) { auto it=begin(); while (it!=end()) { if (seqs((*it), s)) { erase(it); return; } it++; }}
-
 bool MSTR::HasValue(const std::string &sv) const { for (auto p:(*this)) if (sieqs(p.second, sv)) { return true; } return false; }
 
 //--------------------------------------------------------------------------------------------------
@@ -508,7 +505,7 @@ DTStamp ToDTStamp(const std::string &yyyymmddHHMMSS)
 const std::string month_name(int m, bool bfull)
 {
 	if ((m<1)||(m>12)) return "?m?";
-	static const VSTR vf={ "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December" };
+	static const VSTR vf("January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December");
 	static const VSTR va={ "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
 	if (bfull) return vf[m-1];
 	return va[m-1];
@@ -1168,7 +1165,7 @@ void splitslr(std::string s, char cdiv, std::string &l, std::string &r)
 	else l=s;
 }
 
-void splitslr(std::string s, std::string sdiv, std::string &l, std::string &r)
+void splitslr(std::string s, const std::string &sdiv, std::string &l, std::string &r)
 {
 	size_t p;
 	r.clear();
