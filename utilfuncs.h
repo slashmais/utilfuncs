@@ -46,15 +46,21 @@ namespace FSYS=std::filesystem;
 
 //--------------------------------------------------------------------------------------------------Generic Vector
 enum { SORT_NONE, SORT_ASC, SORT_DESC, };
+
+template<typename L, typename R> int scmp(const L &l, const R &r);
+template<typename L, typename R> int sicmp(const L &l, const R &r);
+template<typename L, typename R=L> bool seqs(const L &l, const R &r);
+template<typename L, typename R=L> bool sieqs(const L &l, const R &r);
+
 template<typename T> struct VType : public std::vector<T>
 {
 	//generic vec to supply Add(), Set(), Has(), Drop(), use variadics & optional sort, optional unique
 	
 	using VT=std::vector<T>;
-	int sorder{SORT_NONE}; //NB: to use sort: operators <() and >() must be defined on T
-	bool bunique{false}; //strip dupes
+	int sorder{SORT_NONE};
+	bool bunique{false}; //true=>strip dupes on add
 	void clear()				{ VT::clear(); }
-	bool empty()				{ return VT::empty(); }
+	bool empty() const			{ return VT::empty(); }
 	virtual ~VType()			{ clear(); }
 	VType()						{ clear(); }
 	VType<T>& setsortorder(int order)
@@ -87,59 +93,75 @@ template<typename T> struct VType : public std::vector<T>
 			while (it!=VT::end()) { if (!(p=cmp((*it), t))) it++; else break; }
 			if (p>=0) VT::insert(it, t);
 		}
-	bool Has(const T &t) const	{ for (auto e:(*this)) { if (e==t) return true; } return false; }
-	void Add(const T &t) { this->push_back(t); }
-	void Add(const VType<T> &V)					{ for (auto e:V) Add(e); }					//insert/append content from vec
-	VType<T>& operator=(const std::vector<T> &V) { clear();
-	 Add(V);
-	  return *this; }			//replace content from vec
-	VType<T>& operator=(const VType<T> &V)		{ clear();
-	 sorder=V.sorder;
-	  Add(V);
-	   return *this; }		//replace content from vec
-	template<typename...P> void Add(P...p)		{ VT v{p...}; for (auto pp:v) Add(pp); }	//insert/append content from variadic
-	template<typename...P> VType<T>& Set(P...p)	{ clear(); (Add(p...)); return *this;}		//replace content from variadic
-	template<typename...P> VType(P...p)			{ clear(); Set(p...); }						//variadic ctor
-	VType(const VType<T> &V)					{ *this=V; }								//copy ctor
-	bool Drop(const T &t)
+	bool Has(const T &t) const						{ for (auto e:(*this)) { if (e==t) return true; } return false; }
+	void Add(const T &t)							{ this->push_back(t); }
+	void Add(const VType<T> &V)						{ for (auto e:V) Add(e); }
+	VType<T>& operator=(const std::vector<T> &V)	{ clear(); Add(V); return *this; }
+	VType<T>& operator=(const VType<T> &V)			{ clear(); bunique=V.bunique; sorder=V.sorder; Add(V); return *this; }
+	template<typename...P> void Add(P...p)			{ VT v{p...}; for (auto pp:v) Add(pp); }
+	template<typename...P> VType<T>& Set(P...p)		{ clear(); (Add(p...)); return *this;}
+	template<typename...P> VType(P...p)				{ clear(); Set(p...); } //variadic ctor
+	VType(const VType<T> &V)						{ *this=V; }
+	bool Drop(const T &t) //only first found
 		{
 			auto it=VT::begin();
 			while (it!=VT::end()) { if ((*it)==t) { VT::erase(it); return true; } it++; }
 			return false;
 		}
-	void DropAll(const T &t)
+	void RemoveDupes(const T &t)
 		{
+			bool b=Has(t);
 			auto it=VT::begin();
 			while (it!=VT::end()) { if ((*it)==t) { VT::erase(it++); } else it++; }
+			if (b) Add(t);
+		}
+	//fixme: this should only apply if T can stream(has operator<<() [& >>()] defined)
+	friend std::ostream& operator<<(std::ostream &os, const VType &v)
+		{
+			os << "[";
+			if (v.size()) os << v[0];
+			if (v.size()>1) { for (size_t i=1; i<(v.size()-1); i++) os << ", " << v[i]; }
+			os << ", " << v[(v.size()-1)] << "]";
+			return os;
 		}
 };
 
 typedef VType<std::string> VSTR; //most-used vector-type
 
+
 //--------------------------------------------------------------------------------------------------Generic Map
-struct MSTR : std::map<std::string, std::string>
+template<typename K, typename V=K> struct MType : std::map<K, V>
 {
-	virtual ~MSTR() { clear(); }
-	MSTR()  { clear(); }
-	bool HasKey(const std::string &sk) const { return (find(sk)!=end()); }
-	bool HasValue(const std::string &sv) const; //ignores value-case
-	void Add(const std::string &sk, const std::string &sv) { if (!sk.empty()&&!HasKey(sk)) (*this)[sk]=sv; } //only if key does not exist
-	void Drop(const std::string &sk) { erase(sk); }
-	std::string Get(const std::string &sk) const { std::string s{}; if (HasKey(sk)) s=at(sk); return s; }
-	void Set(const std::string &sk, const std::string &sv) { if (!sk.empty()) (*this)[sk]=sv; } //add/replace value
+	// Add() new only & NOT replace; Set() new & replace; rest is just aliases
+	using MT=std::map<K, V>;
+	void clear()		{ MT::clear(); }
+	bool empty() const	{ return MT::empty(); }
+	virtual ~MType()	{ clear(); }
+	MType()				{ clear(); }
+	inline bool HasKey(const K &k) const		{ return (MT::find(k)!=MT::end()); }
+	inline bool HasValue(const V &v) const		{ for (auto p:(*this)) { if (p.second==v) return true; } return false; }
+	inline void Add(const K &k, const V &v)		{ MT::emplace(k, v); } //alias for emplace() - only if key does not exist
+	inline void Drop(const K &k)				{ MT::erase(k); }
+	inline const V Get(const K &k) const		{ V v{}; if (HasKey(k)) v=MT::at(k); return v; }
+	inline void Set(const K &k, const V &v)		{ (*this)[k]=v; } //add/replace value
 };
 
+typedef MType<std::string> MSTR;
+
+typedef MType<std::string, VSTR> MVSTR;
+/*
 struct MVSTR : std::map<std::string, VSTR >
 {
 	virtual ~MVSTR() { clear(); }
 	MVSTR()  { clear(); }
-	bool HasKey(const std::string &sk) const { return (find(sk)!=end()); }
-	bool HasValue(const std::string &sv) const { for (auto p:(*this)) { if (p.second.Has(sv)) return true; } return false; }
-	void Add(const std::string &sk, const std::string &sv) { VSTR &V=(*this)[sk]; V.Add(sv); }
-	void Drop(const std::string &sk) { if (HasKey(sk)) { (*this)[sk].clear(); erase(sk); }}
-	VSTR Get(const std::string &sk) const { VSTR V{}; if (HasKey(sk)) V=at(sk); return V; }
-	void Set(const std::string &sk, const VSTR &V) { if (!sk.empty()) (*this)[sk]=V; } //add/replace value
+	bool HasKey(const std::string &sk) const				{ return (find(sk)!=end()); }
+	bool HasValue(const std::string &sv) const				{ for (auto p:(*this)) { if (p.second.Has(sv)) return true; } return false; }
+	void Add(const std::string &sk, const std::string &sv)	{ VSTR &V=(*this)[sk]; V.Add(sv); }
+	void Drop(const std::string &sk)						{ if (HasKey(sk)) { (*this)[sk].clear(); erase(sk); }}
+	VSTR Get(const std::string &sk) const					{ VSTR V{}; if (HasKey(sk)) V=at(sk); return V; }
+	void Set(const std::string &sk, const VSTR &V)			{ if (!sk.empty()) (*this)[sk]=V; } //add/replace value
 };
+*/
 
 
 //--------------------------------------------------------------------------------------------------
@@ -147,26 +169,26 @@ struct NOCOPY { private: NOCOPY(const NOCOPY&)=delete; NOCOPY& operator=(const N
 
 
 //--------------------------------------------------------------------------------------------------system-error-logging-etc
-const std::string get_error_report();
+std::string get_error_report();
 void clear_error_report();
 bool report_error(const std::string &serr, bool btell=true);//=false);
 bool log_report_error(const std::string &serr, bool btell=true);//=false);
 
 //--------------------------------------------------------------------------------------------------user-errors
-const std::string get_utilfuncs_error(); //only last error set is kept
+std::string get_utilfuncs_error(); //only last error set is kept
 void clear_utilfuncs_error();
 bool set_utilfuncs_error(const std::string &serr, bool btell=false);
 
 //--------------------------------------------------------------------------------------------------
 
-void PRINTSTRING(const std::string &s);
-const std::string READSTRING(const std::string &sprompt);
+void WRITESTRING(const std::string &s);
+std::string READSTRING(const std::string &sprompt);
 
 #if defined(flagGUI)
 void MsgOK(std::string msg, std::string title="Message");
 #endif
 
-const std::string askuser(const std::string &sprompt);
+std::string askuser(const std::string &sprompt);
 bool askok(const std::string &smsg);
 
 void waitenter(const std::string &msg="");
@@ -179,10 +201,10 @@ bool validate_app_path(std::string sFP, std::string &sRet);
 #endif
 
 std::string thisapp();
-const std::string username();
-const std::string username(int uid);
-const std::string homedir();
-const std::string hostname();
+std::string username(); //current user
+std::string username(int uid);
+std::string homedir();
+std::string hostname();
 
 //process (using /proc, etc)
 pid_t find_pid(const std::string &spath);
@@ -197,12 +219,18 @@ bool kill_app(const std::string &spath);
 	bool has_root_access();
 #endif
 
-template<typename...P> void say(P...p) { std::string r{}; std::stringstream ss(""); (ss<<...<<p); r=ss.str(); PRINTSTRING(r); }
+
+//--------------------------------------------------------------------------------------------------
+
+template<typename...P> void say(P...p) { std::string r{}; std::stringstream ss(""); (ss<<...<<p); r=ss.str(); WRITESTRING(r); }
 template<typename...P> std::string says(P...p) { std::string r{}; std::stringstream ss(""); (ss<<...<<p); r=ss.str(); return r; }
 template<typename...P> void sayss(std::string &s, P...p) { std::string r{}; std::stringstream ss(""); (ss<<...<<p); r=ss.str();  s+=r; } //APPENDS! to s!
-template<typename...P> bool sayerr(P...p) { std::string r{}; std::stringstream ss(""); ss<<"error: "; (ss<<...<<p); r=ss.str(); PRINTSTRING(r); return false; }
-template<typename...P> bool sayfail(P...p) { std::string r{}; std::stringstream ss(""); ss<<"fail: "; (ss<<...<<p); r=ss.str(); PRINTSTRING(r); return false; }
+template<typename...P> bool sayerr(P...p) { std::string r{}; std::stringstream ss(""); ss<<"error: "; (ss<<...<<p); r=ss.str(); WRITESTRING(r); return false; }
+template<typename...P> bool sayfail(P...p) { std::string r{}; std::stringstream ss(""); ss<<"fail: "; (ss<<...<<p); r=ss.str(); WRITESTRING(r); return false; }
 
+
+//--------------------------------------------------------------------------------------------------
+//unpacks variadic into csv-string (found this somewhere, dunno how or why (or if) it works!?!?)
 template<typename H, typename...T> std::string unpack2csv(H h, T...t)
 {
 	std::stringstream ss("");
@@ -211,9 +239,8 @@ template<typename H, typename...T> std::string unpack2csv(H h, T...t)
 	return ss.str();
 }
 
-
+//--------------------------------------------------------------------------------------------------
 void write_to_log(const std::string &slogname, const std::string &sinfo); //create/append to ~/LOGFILES/slogname
-
 template<typename...T> void logger(T...t) { std::ofstream ofs(homedir()+"/LOGGER.LOG", std::ios::app); (ofs<<...<<t)<<"\n"; ofs.close(); }
 template<typename...T> void logger(const std::string &slogfile, T...t) { std::ofstream ofs(slogfile.c_str(), std::ios::app); (ofs<<...<<t)<<"\n"; ofs.close(); }
 
@@ -225,15 +252,15 @@ inline int trace_sequence() { static int ts{0}; ++ts; return ts; }
 template<typename...P> void trace(P...p)
 	{
 		//call with: "trace( WAI, rest, of, info);" -- will give location via wai-data
-		// - trace_to_log() - without the PRINTSTRING() is better -
+		// - trace_to_log() - without the WRITESTRING() is better -
 		std::string r{};
 		std::stringstream ss("");
 		(ss<<...<<p);
 		r=ss.str();
 		write_to_log("TRACE.log", r);
-		PRINTSTRING(r);
+		WRITESTRING(r);
 	}
-template<typename...P> void trace_to_log(P...p) //THIS IS THE BEST DEBUGGING-HELPER-FUNCTION I HAVE EVER WRITTEN!
+template<typename...P> void trace_to_log(P...p) //VERY helpful debugging function
 	{
 		//*** call with: "trace_to_log(WAI, rest, of, info);" -- will give location via wai-data ***
 		std::string r{};
@@ -286,28 +313,16 @@ auto round_nearest	= [](double d)->double{ return double((dbl_is_zero(d))?0.0:(d
 auto round_lesser	= [](double d)->double{ return double((dbl_is_zero(d))?0.0:(d>0.0)?int(d):int(d-0.5)); };
 auto round_greater	= [](double d)->double{ return double((dbl_is_zero(d))?0.0:(d>0.0)?(((d-int(d))>0)?(int(d)+1):int(d)):int(d)); };
 
+//--------------------------------------------------------------------------------------------------
 const double PI=3.1415926535897; //180
 const double PIx2=(PI*2.0); //360
 const double PId2=(PI/2.0); //90
 const double PId4=(PI/4.0); //45
 const double PIx2d3=(PI*2.0/3.0); //120
 const double PIx3d2=(PI*3.0/2.0); //=(PI+Pd2);  //270
-/* xxxxxx-replace below usages with above
-const double pi=3.1415926535897; //180
-const double pi2=(pi*2.0); //360
-const double pid2=(pi/2.0); //90
-const double pid4=(pi/4.0); //45
-const double pi3d2=(pi*3.0/2.0); //270
-xxxxxx */
 
 inline double degtorad(double deg) { return (deg*PI/180); }
 inline double radtodeg(double rad) { return (rad*180/PI); }
-
-
-//--------------------------------------------------------------------------------------------------
-inline bool is_name_char(int c)	{ return (((c>='0')&&(c<='9')) || ((c>='A')&&(c<='Z')) || ((c>='a')&&(c<='z')) || (c=='_')); }
-// bash/linux...
-const std::string bash_escape_name(const std::string &name);
 
 //--------------------------------------------------------------------------------------------------
 __attribute__((always_inline)) inline void kips(int sec) { std::this_thread::sleep_for(std::chrono::seconds(sec)); } //1.0
@@ -349,21 +364,26 @@ const std::string ToDateStr(DTStamp dts, int ds=DS_SHORT, bool btime=true, bool 
 	DS_FULL			ccyy month dd[ HH:MM:SS[.u...]]
 	DS_SHORT		ccyy mon dd[ HH:MM:SS[.u...]]
 	DS_COMPACT		ccyy mm dd[ HH:MM:SS[.u...]]
-	DS_SQUASH		yymmddHHMMSS[.u...]
+	DS_SQUASH		yymmdd[HHMMSS[.u...]]
 */
 
 inline bool is_leap_year(int y) { return (((y%4==0)&&(y%100!= 0))||(y%400==0)); }
 
 uint64_t get_unique_index();
 std::string get_unique_name(const std::string sprefix="U", const std::string ssuffix="");
-inline bool isvalidname(const std::string &sN) { return (sN.find('/')==std::string::npos); }
+//--------------------------------------------------------------------------------------------------
+inline bool isvalidname(const std::string &sN) { return (sN.find('/')==std::string::npos); } //applies to bash
+inline bool is_name_char(int c)	{ return (((c>='0')&&(c<='9')) || ((c>='A')&&(c<='Z')) || ((c>='a')&&(c<='z')) || (c=='_')); }
+// bash/linux...
+const std::string bash_escape_name(const std::string &name);
 
 
 //--------------------------------------------------------------------------------------------------
 template<typename TypePtr> size_t p2t(TypePtr p) { union { TypePtr u; size_t n; }; u=p; return n; } //??todo...risky...test where used...
 template<typename TypePtr> TypePtr t2p(size_t t) { union { TypePtr u; size_t n; }; n=t; return u; }
 
-//--------------------------------------------------------------------------------------------------
+
+//--------------------------------------------------------------------------------------------------string-related
 ///todo: whitespace chars - beep, para.., backspace, etc
 #define WHITESPACE_CHARS (const char*)" \t\n\r"
 void LTRIM(std::string& s, const char *sch=WHITESPACE_CHARS);
@@ -371,10 +391,9 @@ void RTRIM(std::string& s, const char *sch=WHITESPACE_CHARS);
 void TRIM(std::string& s, const char *sch=WHITESPACE_CHARS);
 void ReplacePhrase(std::string &sTarget, const std::string &sPhrase, const std::string &sReplacement); //each occ of phrase with rep
 void ReplaceChars(std::string &sTarget, const std::string &sChars, const std::string &sReplacement); //each occ of each char from chars with rep
-const std::string SanitizeName(const std::string &sp); //replaces non-alphanums with underscores
+const std::string SanitizeName(const std::string &sp); //replaces non-alphanums with underscores: "a, b\t c" -> "a_b_c"
 
-
-const std::string ucase(const char *sz);
+const std::string ucase(const char *sz); //ascii-only todo: also do unicode upper/lower cases
 const std::string lcase(const char *sz);
 
 inline std::string ucase(const std::string &s) { return ucase(s.c_str()); }
@@ -442,29 +461,26 @@ bool sicontainlike(const std::string &scon, const std::string &sall); //non-case
 //--------------------------------------------------------------------------------------------------
 void RTFtostring(const std::string &srtf, std::string &stext); //...cannot remember why I would need this...
 
-//--------------------------------------------------------------------------------------------------
+//--------------------------------------------------------------------------------------------------UTF8
 //some crude utf8-related funcs...
-unsigned int u8toU(std::string u8);
-std::string Utou8(unsigned int U);
+typedef uint32_t unicodepoint;
+const unicodepoint INVALID_UCP=0xfffd; //'�'
+const std::string INVALID_UTF8="\ufffd";
 
-//unsigned int u8toi(const char *su);
-//{
-//    unsigned int cp{};
-//    while (*su)
-//    {
-//        unsigned char c=(unsigned char)(*su);
-//        cp=(c<=0x7f)?c:(c<=0xbf)?((cp<<6)|(c&0x3f)):(c<=0xdf)?(c&0x1f):(c<=0xef)?cp=(c&0x0f):(c&0x07);
-//        ++su;
-//    }
-//    return cp;
-//}
+unicodepoint u8toU(std::string u8);
+std::string Utou8(unicodepoint U);
 
-bool isvalidutf8(const std::string &s);
-size_t utf8charcount(const std::string &s); //u8 char can be 1 to 4 bytes in size
-std::string utf8charat(const std::string &s, size_t pos); //use utf8charcount() for pos limit
-std::string utf8substr(const std::string &s, size_t pos, size_t len=0);
-size_t utf8charpostobytepos(const std::string &s, size_t pos); //pos=char-pos, ret-val is byte-count to start of char at charpos
-void utf8insert(std::string &su8, const std::string &sins, size_t pos); //inserts or appends
+bool isvalidu8(const std::string &s);
+
+std::string u8charat(const std::string &s, size_t &upos); //inc's upos to next utf8-char
+
+size_t u8charcount(const std::string &s); //u8 char can be 1 to 4 bytes in size
+
+std::string u8substr(const std::string &s, size_t pos, size_t len=0);
+
+size_t u8charpostobytepos(const std::string &s, size_t pos); //pos=char-pos, ret-val is byte-count to start of char at charpos
+
+void u8insert(std::string &su8, const std::string &sins, size_t pos); //inserts or appends
 
 //--------------------------------------------------------------------------------------------------
 enum //GReeK-chars
@@ -480,7 +496,7 @@ inline std::string greekletter(int g, bool bUcase=false)
 {
 	std::string s=(bUcase)?"ΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡςΣΤΥΦΧΨΩ":"αβγδεζηθικλμνξοπρςστυφχψω";
 	std::string l{}; //fix: set to default invalid char
-	if ((g>=0)&&(g<25)) l=utf8charat(s, g);
+	if ((g>=0)&&(g<25)) { size_t p; p=g; l=u8charat(s, p); }
 	return l;
 }
 

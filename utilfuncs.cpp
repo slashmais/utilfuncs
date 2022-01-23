@@ -46,11 +46,11 @@
 #endif
 
 //--------------------------------------------------------------------------------------------------
-bool MSTR::HasValue(const std::string &sv) const { for (auto p:(*this)) if (sieqs(p.second, sv)) { return true; } return false; }
+//bool MSTR::HasValue(const std::string &sv) const { for (auto p:(*this)) if (sieqs(p.second, sv)) { return true; } return false; }
 
 //--------------------------------------------------------------------------------------------------
 std::string s_error_report="";
-const std::string get_error_report() { return s_error_report; }
+std::string get_error_report() { return s_error_report; }
 void clear_error_report() { s_error_report.clear(); }
 bool report_error(const std::string &serr, bool btell) { s_error_report=serr; if (btell) return sayerr(serr); return false; }
 bool log_report_error(const std::string &serr, bool btell)
@@ -69,7 +69,7 @@ void write_to_log(const std::string &slogname, const std::string &sinfo)
 
 //--------------------------------------------------------------------------------------------------
 std::string s_utilfuncs_error="";
-const std::string get_utilfuncs_error() { return s_utilfuncs_error; }
+std::string get_utilfuncs_error() { return s_utilfuncs_error; }
 void clear_utilfuncs_error() { s_utilfuncs_error.clear(); }
 bool set_utilfuncs_error(const std::string &serr, bool btell)
 {
@@ -93,7 +93,7 @@ bool set_utilfuncs_error(const std::string &serr, bool btell)
 #include <CtrlLib/CtrlLib.h>
 #include <CtrlCore/CtrlCore.h>
 using namespace Upp;
-	void PRINTSTRING(const std::string &s)
+	void WRITESTRING(const std::string &s)
 	{
 		std::string S{s};
 		ReplaceChars(S, "\t", "    ");
@@ -149,8 +149,8 @@ using namespace Upp;
 	}
 
 #else
-	void PRINTSTRING(const std::string &s) { std::cout << s << std::flush; }
-	const std::string READSTRING(const std::string &sprompt)
+	void WRITESTRING(const std::string &s) { std::cout << s << std::flush; }
+	std::string READSTRING(const std::string &sprompt)
 	{
 		std::string s{};
 		std::cout << sprompt << ": ";
@@ -170,12 +170,12 @@ using namespace Upp;
 
 	void RTFtostring(const std::string &srtf, std::string &stext)
 	{
-		stext=srtf; //todo...
+		stext=srtf; //todo...can't remember why
 	}
 
 #endif
 
-const std::string askuser(const std::string &sprompt)
+std::string askuser(const std::string &sprompt)
 {
 	return READSTRING(sprompt);
 }
@@ -215,16 +215,16 @@ bool askok(const std::string &smsg)
 		if (!validate_app_path(st, sp)) sp="Error: application not found"; //
 		return sp;
 	}
-	const std::string username() { return getpwuid(getuid())->pw_name; }
-	const std::string username(int uid)
+	std::string username() { return getpwuid(getuid())->pw_name; }
+	std::string username(int uid)
 	{
 		struct passwd *p=getpwuid(uid);
 		std::string s{"?"};
 		if (p) s=p->pw_name;
 		return s;
 	}
-	const std::string homedir() { return getpwuid(getuid())->pw_dir; }
-	const std::string hostname() { char buf[1024]; gethostname(buf, 1024); return std::string((char*)buf); }
+	std::string homedir() { return getpwuid(getuid())->pw_dir; }
+	std::string hostname() { char buf[1024]; gethostname(buf, 1024); return std::string((char*)buf); }
 	
 #elif defined(_WIN64)
 	std::string thisapp()
@@ -563,7 +563,7 @@ void RTRIM(std::string& s, const char *sch)
 void TRIM(std::string& s, const char *sch) { LTRIM(s, sch); RTRIM(s, sch); }
 
 void ReplacePhrase(std::string& S, const std::string& sPhrase, const std::string& sNew)
-{ //replaces EACH occurrence of sPhrase with sNew: ..("a[NL]b[NL]c, "[NL]", "\n") -> "a\nb\nc"
+{ //replaces EACH occurrence of sPhrase with sNew: ..("aXXbXXc, "XX", "YYY") -> "aYYYbYYYc"
 	size_t pos = 0, fpos;
 	std::string s=S;
 	while ((fpos=s.find(sPhrase, pos)) != std::string::npos)
@@ -893,68 +893,46 @@ bool silike(const std::string &sfront, const std::string &sall) //non-case-sensi
 
 
 //--------------------------------------------------------------------------------------------------
-unsigned int u8toU(std::string u8) //const char *su)
+unicodepoint u8toU(std::string u8)
 {
-    unsigned int U{};
-//    const char *psz=u8.c_str();
+    uint32_t U{};
 	int l=u8.size();
-	if (l==1) U=(unsigned int)(u8[0]);
-	unsigned char B=(unsigned char)(u8[0]);
-	if (((B&0xe0)==0xc0)&&(l>=2))
-	 {
-	  U=(B&0x1f);
-	   U<<=6;
-	    U+=(u8[1]&0x3f);
-	     }
+	if (l==1) U=(uint32_t)(u8[0]);
+	uint8_t B=(uint8_t)(u8[0]);
+	if (((B&0xe0)==0xc0)&&(l>=2)) { U=(B&0x1f); U<<=6; U+=(u8[1]&0x3f); }
 	else if (((B&0xf0)==0xe0)&&(l>=3)) { U=(B&0x0f); U<<=6; U+=(u8[1]&0x3f); U<<=6; U+=(u8[2]&0x3f); }
 	else if (((u8[0]&0xf8)==0xf0)&&(l>=4)) { U=(B&0x07); U<<=6; U+=(u8[1]&0x3f); U<<=6; U+=(u8[2]&0x3f); U<<=6; U+=(u8[3]&0x3f); }
-	return U;
-
-/*
-    unsigned int cp{};
-    const char *psz=u8.c_str();
-    while (*psz)
-    {
-        unsigned char c=(unsigned char)(*psz);
-        cp=(c<=0x7f)?c:(c<=0xbf)?((cp<<6)|(c&0x3f)):(c<=0xdf)?(c&0x1f):(c<=0xef)?cp=(c&0x0f):(c&0x07);
-        ++psz;
-    }
-    return cp;
-*/
-
+	return (unicodepoint)U;
 }
-/*
-xxxxint codepoint(const string &u)
-{
-    int l = u.length();
-    if (l<1) return -1; unsigned char u0 = u[0]; if (u0>=0   && u0<=127) return u0;
-    if (l<2) return -1; unsigned char u1 = u[1]; if (u0>=192 && u0<=223) return (u0-192)*64 + (u1-128);
-    if (u[0]==0xed && (u[1] & 0xa0) == 0xa0) return -1; //code points, 0xd800 to 0xdfff
-    if (l<3) return -1; unsigned char u2 = u[2]; if (u0>=224 && u0<=239) return (u0-224)*4096 + (u1-128)*64 + (u2-128);
-    if (l<4) return -1; unsigned char u3 = u[3]; if (u0>=240 && u0<=247) return (u0-240)*262144 + (u1-128)*4096 + (u2-128)*64 + (u3-128);
-    return -1;
-}
-*/
 
-std::string Utou8(unsigned int U)
+std::string Utou8(unicodepoint U)
 {
+	using UC=uint8_t;
 	std::string s("");
-/*
-	if (U<0x80) s+=UC(U);
-	else if (U<=0x10FFFF)
+	if (U<0x80) s=UC(U);
+	else if ((U==0xfffe) //non-characters
+		||(U==0xffff)
+		||((U>=0xfdd0)&&(U<=0xfdef))
+		||(U==0x1fffe)||(U==0x2fffe)||(U==0x3fffe)||(U==0x4fffe)||(U==0x5fffe)||(U==0x6fffe)||(U==0x7fffe)||(U==0x8fffe)
+		||(U==0x9fffe)||(U==0xafffe)||(U==0xbfffe)||(U==0xcfffe)||(U==0xdfffe)||(U==0xefffe)||(U==0xffffe)||(U==0x10fffe)
+		||(U==0x1ffff)||(U==0x2ffff)||(U==0x3ffff)||(U==0x4ffff)||(U==0x5ffff)||(U==0x6ffff)||(U==0x7ffff)||(U==0x8fffe)
+		||(U==0x9ffff)||(U==0xaffff)||(U==0xbffff)||(U==0xcffff)||(U==0xdffff)||(U==0xeffff)||(U==0xfffff)
+		||(U>=0x10ffff))
+	{
+		s=INVALID_UTF8;
+	}
+	else
 	{
 		int n=(U<=0x7FF)?1:(U<=0xFFFF)?2:3;
 		int d=n;
 		while (d-->0) { s.insert(s.begin(), UC(0x80|(U&0x3f))); U>>=6; }
 		s.insert(s.begin(), UC((0x1e<<(6-n))|(U&(0x3F>>n))));
 	}
-	else s=INVALID_UTF8;
-*/
 	return s;
 }
 
 ///reworked copy from: https://www.cl.cam.ac.uk/~mgk25/ucs/utf8_check.c
-bool isvalidutf8(const std::string &s)
+bool isvalidu8(const std::string &s)
 {
 	const unsigned char *p=(const unsigned char*)s.c_str(); //ensure null-terminated (.data may not be?)
 	while (*p)
@@ -990,7 +968,21 @@ bool isvalidutf8(const std::string &s)
 	return true;
 }
 
-size_t utf8charcount(const std::string &s)
+std::string u8charat(const std::string &s, size_t &upos) //inc's upos to next utf8-char
+{
+	std::string sr{};
+	if (upos<s.size())
+	{
+		uint8_t n, c;
+		c=(uint8_t)s.at(upos);
+		n=((c&0xe0)==0xc0)?2:((c&0xf0)==0xe0)?3:((c&0xf8)==0xf0)?4:1;
+		sr=s.substr(upos, n);
+		upos+=n;
+	}
+	return sr;
+}
+
+size_t u8charcount(const std::string &s)
 {
 	size_t i{0}, nc{0};
 	while (i<s.size())
@@ -1002,25 +994,7 @@ size_t utf8charcount(const std::string &s)
 	return nc;
 }
 
-std::string utf8charat(const std::string &s, size_t pos)
-{
-	size_t n, i{0}, nc{0};
-	unsigned char c;
-	if (pos<s.size())
-	{
-		while (i<s.size())
-		{
-			c=(unsigned char)s.at(i);
-			n=((c&0xe0)==0xc0)?2:((c&0xf0)==0xe0)?3:((c&0xf8)==0xf0)?4:1;
-			if (nc==pos) return s.substr(i, n);
-			i+=n;
-			nc++;
-		}
-	}
-	return std::string();
-}
-
-std::string utf8substr(const std::string &s, size_t pos, size_t len)
+std::string u8substr(const std::string &s, size_t pos, size_t len) //like std::string::substr()
 {
 	if (!len) len=s.size();
 	if (len&&(pos<s.size()))
@@ -1041,7 +1015,7 @@ std::string utf8substr(const std::string &s, size_t pos, size_t len)
 	return std::string();
 }
 
-size_t utf8charpostobytepos(const std::string &s, size_t pos)
+size_t u8charpostobytepos(const std::string &s, size_t pos)
 {
 	size_t n, i{0}, nc{0}; //n=utility, i=byte-count, nc=charcount
 	unsigned char c; //byte-value at i
@@ -1056,9 +1030,9 @@ size_t utf8charpostobytepos(const std::string &s, size_t pos)
 	return i; //byte-pos or string-size
 }
 
-void utf8insert(std::string &su8, const std::string &sins, size_t pos)
+void u8insert(std::string &su8, const std::string &sins, size_t pos)
 {
-	size_t bp=utf8charpostobytepos(su8, pos);
+	size_t bp=u8charpostobytepos(su8, pos);
 	if (bp<su8.size())
 	{
 		std::string s;
