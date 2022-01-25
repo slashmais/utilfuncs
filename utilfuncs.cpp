@@ -99,7 +99,7 @@ using namespace Upp;
 		ReplaceChars(S, "\t", "    ");
 		PromptOK(DeQtf(S.c_str()));
 	}
-	const std::string READSTRING(const std::string &sprompt)
+	std::string READSTRING(const std::string &sprompt)
 	{
 		std::string s;
 		struct Dlg : public TopWindow
@@ -2801,6 +2801,12 @@ bool IsDecimal(const std::string &s) //assumes d , .d , d. , d.d , d,ddd.d
 	return true;
 }
 
+//--------------------------------------------------------------------------------------------------
+//explicit specialization to check if std::string contain a number
+template<> bool is_numeric <std::string> (std::string s)
+{
+	return (IsInteger(s)||IsDecimal(s));
+}
 
 //--------------------------------------------------------------------------------------------------
 //explicit specializations of ensv & desv for std::string

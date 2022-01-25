@@ -52,18 +52,18 @@ template<typename L, typename R> int sicmp(const L &l, const R &r);
 template<typename L, typename R=L> bool seqs(const L &l, const R &r);
 template<typename L, typename R=L> bool sieqs(const L &l, const R &r);
 
-template<typename T> struct VType : public std::vector<T>
+template<typename T, bool Unique=false> struct VType : public std::vector<T>
 {
 	//generic vec to supply Add(), Set(), Has(), Drop(), use variadics & optional sort, optional unique
 	
 	using VT=std::vector<T>;
+	bool bUniq{Unique}; //true=>strip dupes on add
 	int sorder{SORT_NONE};
-	bool bunique{false}; //true=>strip dupes on add
 	void clear()				{ VT::clear(); }
 	bool empty() const			{ return VT::empty(); }
 	virtual ~VType()			{ clear(); }
 	VType()						{ clear(); }
-	VType<T>& setsortorder(int order)
+	VType& setsortorder(int order)
 		{
 			if ((order>=0)&&(order<=SORT_DESC)&&(order!=sorder))
 			{
@@ -72,19 +72,19 @@ template<typename T> struct VType : public std::vector<T>
 			}
 			return *this;
 		}
-	VType<T>& setunique(bool b=true)
+	VType& setunique(bool b=true)
 		{
-			bool bb=(b&&!bunique);
-			bunique=b;
+			bool bb=(b&&!bUniq);
+			bUniq=b;
 			if (bb&&!empty()) *this=VT(*this);
 			return *this;
 		}
 	void push_back(const T &t)
 		{
-			if (VT::empty()||(!bunique&&(sorder==SORT_NONE))) { VT::push_back(t); return; }
+			if (VT::empty()||(!bUniq&&(sorder==SORT_NONE))) { VT::push_back(t); return; }
 			auto cmp=[this](const T &l, const T &r)->int
 				{
-					if (bunique&&(l==r)) return (-1);
+					if (bUniq&&(l==r)) return (-1);
 					if (sorder==SORT_ASC) return (l>r)?1:0;
 					return (l<r)?1:0;
 				};
@@ -96,8 +96,8 @@ template<typename T> struct VType : public std::vector<T>
 	bool Has(const T &t) const						{ for (auto e:(*this)) { if (e==t) return true; } return false; }
 	void Add(const T &t)							{ this->push_back(t); }
 	void Add(const VType<T> &V)						{ for (auto e:V) Add(e); }
-	VType<T>& operator=(const std::vector<T> &V)	{ clear(); Add(V); return *this; }
-	VType<T>& operator=(const VType<T> &V)			{ clear(); bunique=V.bunique; sorder=V.sorder; Add(V); return *this; }
+	VType& operator=(const std::vector<T> &V)	{ clear(); Add(V); return *this; }
+	VType& operator=(const VType<T> &V)			{ clear(); bUniq=V.bUniq; sorder=V.sorder; Add(V); return *this; }
 	template<typename...P> void Add(P...p)			{ VT v{p...}; for (auto pp:v) Add(pp); }
 	template<typename...P> VType<T>& Set(P...p)		{ clear(); (Add(p...)); return *this;}
 	template<typename...P> VType(P...p)				{ clear(); Set(p...); } //variadic ctor
@@ -126,13 +126,14 @@ template<typename T> struct VType : public std::vector<T>
 		}
 };
 
-typedef VType<std::string> VSTR; //most-used vector-type
+typedef VType<std::string> VSTR;
+typedef VType<std::string, true> VUSTR;
 
 
 //--------------------------------------------------------------------------------------------------Generic Map
 template<typename K, typename V=K> struct MType : std::map<K, V>
 {
-	// Add() new only & NOT replace; Set() new & replace; rest is just aliases
+	// Add() new only & NOT replace; Set() new & replace; rest are just aliases
 	using MT=std::map<K, V>;
 	void clear()		{ MT::clear(); }
 	bool empty() const	{ return MT::empty(); }
@@ -147,8 +148,8 @@ template<typename K, typename V=K> struct MType : std::map<K, V>
 };
 
 typedef MType<std::string> MSTR;
-
 typedef MType<std::string, VSTR> MVSTR;
+
 /*
 struct MVSTR : std::map<std::string, VSTR >
 {
@@ -396,6 +397,7 @@ const std::string SanitizeName(const std::string &sp); //replaces non-alphanums 
 const std::string ucase(const char *sz); //ascii-only todo: also do unicode upper/lower cases
 const std::string lcase(const char *sz);
 
+// ***** See also: uucase(), ulcase(), touucase(), toulcase() in uul.h/cpp *****
 inline std::string ucase(const std::string &s) { return ucase(s.c_str()); }
 inline void toucase(std::string& s) { s=ucase(s.c_str()); }
 inline std::string lcase(const std::string &s) { return lcase(s.c_str()); }
@@ -768,73 +770,12 @@ bool findfdnamelike(std::string sdir, std::string slike, VSTR &vfound, bool bsam
 
 bool isencrypted(std::string sf);
 
-//--------------------------------------------------------------------------------------------------
-/*
-		REPLACED BY NDPoint<> & NDVector<>
-		
-template<typename N> struct PXY //2D point
-{
-	N x;
-	N y;
-	void clear() { x=y=0; }
-	~PXY() {}
-	PXY() { clear(); }
-	PXY(const PXY &P) { *this=P; }
-	PXY(N X, N Y) { x=X; y=Y; }
-	PXY& operator=(const PXY &P) { x=(N)P.x; y=(N)P.y; return *this; }
-
-	bool operator==(const PXY &P) const { return (dbl_is_equal((double)x, (double)P.x)&&dbl_is_equal((double)y, (double)P.y)); }
-	bool operator!=(const PXY &P) const { return !(*this==P); }
-
-	PXY& operator+=(const PXY &P) { x+=(N)P.x; y+=(N)P.y; return *this; }
-	PXY& operator-=(const PXY &P) { x-=(N)P.x; y-=(N)P.y; return *this; }
-
-	PXY& operator*=(double d) { x=(N)((double)x*d); y=(N)((double)y*d); return *this; }
-	PXY& operator*=(int n) { return ((*this)*=(double)n); }
-	PXY& operator/=(double d) { x=(N)((double)x/d); y=(N)((double)y/d); return *this; }
-	PXY& operator/=(int n) { return ((*this)/=(double)n); }
-
-	double dotproduct(const PXY &P) const { return ((double(x)*double(P.x))+(double(y)*double(P.y))); }
-	double length() const { return sqrt(dotproduct(*this)); }
-	PXY& normalize() { return ((*this)/=length()); }
-	PXY normalize() const { PXY P(*this); P/=P.length(); return P; }
-};
-
-template<typename N> double dotproduct(const PXY<N> &l, const PXY<N> &r) { return ((double(l.x)*double(r.x))+(double(l.y)*double(r.y))); }
-template<typename N> PXY<N> operator+(const PXY<N> &l, const PXY<N> &r) { PXY<N> p(l); p+=r; return p; }
-template<typename N> PXY<N> operator-(const PXY<N> &l, const PXY<N> &r) { PXY<N> p(l); p-=r; return p; }
-template<typename N> PXY<N> operator*(const PXY<N> &l, double d) { PXY<N> p(l); p*=d; return p; }
-template<typename N> PXY<N> operator*( double d, const PXY<N> &l) { PXY<N> p(l); p*=d; return p; }
-template<typename N> PXY<N> operator*(const PXY<N> &l, int n) { PXY<N> p(l); p*=n; return p; }
-template<typename N> PXY<N> operator*(int n, const PXY<N> &l) { PXY<N> p(l); p*=n; return p; }
-template<typename N> PXY<N> operator/(const PXY<N> &l, double d) { PXY<N> p(l); p.x=(N)(double(p.x)/d); p.y=(N)(double(p.y)/d); return p; }
-template<typename N> PXY<N> operator/(const PXY<N> &l, int n) { return (l/double(n)); }
-
-
-template<typename N> struct PXYZ //3D point
-{
-	N x;
-	N y;
-	N z;
-
-	//todo...
-
-	PXYZ crossproduct(const PXYZ &P) const { PXYZ R; R.x=((y*R.z)-(z*R.y)); R.y=((z*R.x)-(x*R.z)); R.z=((x*R.y)-(y*R.x)); return R; }
-	
-};
-
-/ *
-template<typename N> struct PXYZW //homogeneous (4-vector)
-{
-}
-*/
 
 //--------------------------------------------------------------------------------------------------
+//explicitly specialized to check if a string-content is numeric
 template<typename T> bool is_numeric(T t)
 {
-	//need concept that checks if is number or is convertible to a number (size_t
-	return true;
-	//return (std::is_integral<decltype(t)>{}||std::is_floating_point<decltype(t)>{});
+	return std::is_arithmetic_v<T>;
 }
 
 template<typename N, typename I=int> N cmod(N v, N b) //clock-modulus
@@ -1781,10 +1722,10 @@ template<typename N, int D=2> struct NDPoint //default 2D
 	N x() const { return (*this)[0]; }
 	N& y() { return (*this)[1]; }
 	N y() const { return (*this)[1]; }
-	N& z() { return (*this)[2]; }
-	N z() const { return (*this)[2]; }
-	N& w() { return (*this)[3]; }
-	N w() const { return (*this)[3]; }
+	N& z() { if (DIM<3) std::out_of_range("NDPoint: dimension-error"); return (*this)[2]; }
+	N z() const { if (DIM<3) std::out_of_range("NDPoint: dimension-error"); return (*this)[2]; }
+	N& w() { if (DIM<4) std::out_of_range("NDPoint: dimension-error"); return (*this)[3]; }
+	N w() const { if (DIM<4) std::out_of_range("NDPoint: dimension-error"); return (*this)[3]; }
 
 	friend std::ostream& operator<<(std::ostream &os, const NDPoint &P) { os << "(" << P[0]; for (int i=1; i<P.DIM; i++) os << ", " << P[i]; os << ")"; return os; }
 
