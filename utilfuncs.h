@@ -59,10 +59,10 @@ template<typename T, bool Unique=false> struct VType : public std::vector<T>
 	using VT=std::vector<T>;
 	bool bUniq{Unique}; //true=>strip dupes on add
 	int sorder{SORT_NONE};
-	void clear()				{ VT::clear(); }
-	bool empty() const			{ return VT::empty(); }
-	virtual ~VType()			{ clear(); }
-	VType()						{ clear(); }
+	void clear()								{ VT::clear(); }
+	bool empty() const							{ return VT::empty(); }
+	virtual ~VType()							{ clear(); }
+	VType()										{ clear(); }
 	VType& setsortorder(int order)
 		{
 			if ((order>=0)&&(order<=SORT_DESC)&&(order!=sorder))
@@ -96,8 +96,8 @@ template<typename T, bool Unique=false> struct VType : public std::vector<T>
 	bool Has(const T &t) const						{ for (auto e:(*this)) { if (e==t) return true; } return false; }
 	void Add(const T &t)							{ this->push_back(t); }
 	void Add(const VType<T> &V)						{ for (auto e:V) Add(e); }
-	VType& operator=(const std::vector<T> &V)	{ clear(); Add(V); return *this; }
-	VType& operator=(const VType<T> &V)			{ clear(); bUniq=V.bUniq; sorder=V.sorder; Add(V); return *this; }
+	VType& operator=(const std::vector<T> &V)		{ clear(); Add(V); return *this; }
+	VType& operator=(const VType<T> &V)				{ clear(); bUniq=V.bUniq; sorder=V.sorder; Add(V); return *this; }
 	template<typename...P> void Add(P...p)			{ VT v{p...}; for (auto pp:v) Add(pp); }
 	template<typename...P> VType<T>& Set(P...p)		{ clear(); (Add(p...)); return *this;}
 	template<typename...P> VType(P...p)				{ clear(); Set(p...); } //variadic ctor
@@ -110,10 +110,10 @@ template<typename T, bool Unique=false> struct VType : public std::vector<T>
 		}
 	void RemoveDupes(const T &t)
 		{
-			bool b=Has(t);
+			bool b{false};
 			auto it=VT::begin();
-			while (it!=VT::end()) { if ((*it)==t) { VT::erase(it++); } else it++; }
-			if (b) Add(t);
+			while (it!=VT::end()) { if ((*it)==t) { b=true; VT::erase(it++); } else it++; } //remove all
+			if (b) Add(t); //restore 1 entry
 		}
 	//fixme: this should only apply if T can stream(has operator<<() [& >>()] defined)
 	friend std::ostream& operator<<(std::ostream &os, const VType &v)
@@ -127,7 +127,7 @@ template<typename T, bool Unique=false> struct VType : public std::vector<T>
 };
 
 typedef VType<std::string> VSTR;
-typedef VType<std::string, true> VUSTR;
+typedef VType<std::string, true> VUSTR; //unique entries (no dupes)
 
 
 //--------------------------------------------------------------------------------------------------Generic Map
