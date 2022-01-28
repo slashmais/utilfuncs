@@ -212,7 +212,7 @@ bool askok(const std::string &smsg)
 		std::string sp{}, st;
 		std::ifstream(says("/proc/", getpid(), "/cmdline").c_str()) >> st;
 		st=st.c_str(); //remove terminating '\0's; also problem if name contain spaces/parms - validate..
-		if (!validate_app_path(st, sp)) sp="Error: application not found"; //
+		if (!validate_app_path(st, sp)) sp.clear(); //="Error: application not found"; //
 		return sp;
 	}
 	std::string username() { return getpwuid(getuid())->pw_name; }
@@ -247,7 +247,7 @@ bool askok(const std::string &smsg)
 #endif
 
 // bash/linux...
-const std::string bash_escape_name(const std::string &name)
+std::string bash_escape_name(const std::string &name)
 {
 	 //see: https://unix.stackexchange.com/questions/347332/what-characters-need-to-be-escaped-in-files-without-quotes
 	std::string ename="", ec=" \t!\"'#$&()*,;<>=?[]\\^`{}|~";
@@ -375,6 +375,16 @@ bool kill_app(const std::string &spath)
 	
 #endif
 
+//--------------------------------------------------------------------------------------------------
+std::string to_sKMGT(size_t n)
+{
+	std::string s("");
+	int i=0,t;
+	double f=n;
+	while (f>1024.0) { i++; f/=1024.0; }
+	t=(int)(f*100.0); f=((double)t/100.0);
+	return says(f, i["bKMGTPEZY"]);
+}
 
 //--------------------------------------------------------------------------------------------------
 #define MAX_SHORT 65535L
@@ -424,7 +434,7 @@ std::string ymdhms_stamp()
 	return dts;
 }
 
-const std::string h_dt_stamp()
+std::string h_dt_stamp()
 {
 	//output: 0y0m0d0H0M0Sxx (e.g.: "181123111051A3" => 2018 Nov 23 11:10:51 (A3 is reduced-microsec-suffix)
 	
@@ -502,7 +512,7 @@ DTStamp ToDTStamp(const std::string &yyyymmddHHMMSS)
 	return dts;
 }
 
-const std::string month_name(int m, bool bfull)
+std::string month_name(int m, bool bfull)
 {
 	if ((m<1)||(m>12)) return "?m?";
 	static const VSTR vf("January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December");
@@ -511,7 +521,7 @@ const std::string month_name(int m, bool bfull)
 	return va[m-1];
 }
 
-const std::string ToDateStr(DTStamp dts, int ds, bool btime, bool bmsec)
+std::string ToDateStr(DTStamp dts, int ds, bool btime, bool bmsec)
 {
 	std::string sdt{}, st{}, su{};
 	uint32_t y,m,d,H,M,S,U;
@@ -576,7 +586,7 @@ void ReplacePhrase(std::string& S, const std::string& sPhrase, const std::string
 
 void ReplaceChars(std::string &s, const std::string &sCharList, const std::string &sReplacement)
 { //replaces EACH occurrence of EACH single char in sCharList with sReplacement: ..("abcde", "ace", "XX") -> "XXbXXdXX"
-    std::string::size_type pos = 0;
+    size_t pos=0;
     while ((pos=s.find_first_of(sCharList, pos))!= std::string::npos)
     {
         s.replace(pos, 1, sReplacement);
@@ -584,7 +594,7 @@ void ReplaceChars(std::string &s, const std::string &sCharList, const std::strin
     }
 }
 
-const std::string SanitizeName(const std::string &sp)
+std::string SanitizeName(const std::string &sp)
 {
 	std::string s=sp;
 	ReplaceChars(s, " \\+-=~`!@#$%^&*()[]{}:;\"|'<>,.?/", "_");
@@ -594,7 +604,35 @@ const std::string SanitizeName(const std::string &sp)
 	return s;
 }
 
-const std::string ucase(const char *sz)
+std::string EscapeChars(const std::string &raw, const std::string &sChars)
+{
+    std::string sret{};
+    for (size_t pos=0; pos<raw.size(); pos++)
+    {
+        if ((raw[pos]=='\\')||(sChars.find(raw[pos])!=std::string::npos)) sret+='\\';
+        sret+=raw[pos];
+    }
+    return sret;
+}
+
+std::string UnescapeChars(const std::string &sesc)
+{
+    std::string sret{};
+    bool bp{false};
+    for (size_t pos=0; pos<sesc.size(); pos++)
+    {
+		if (sesc[pos]=='\\')
+		{
+			if (!bp) bp=true;
+			else { sret+=sesc[pos]; bp=false; }
+			
+		}
+		else { bp=false; sret+=sesc[pos]; }
+	}
+	return sret;
+}
+
+std::string ucase(const char *sz)
 {
 	std::string w(sz);
 	for (auto &c:w) c=std::toupper(static_cast<unsigned char>(c));
@@ -604,7 +642,7 @@ const std::string ucase(const char *sz)
 //const std::string ucase(const std::string &s) { return ucase(s.c_str()); }
 //void toucase(std::string& s) { s=ucase(s.c_str()); }
 
-const std::string lcase(const char *sz)
+std::string lcase(const char *sz)
 {
 	std::string w(sz);
 	for (auto &c:w) c=std::tolower(static_cast<unsigned char>(c));
@@ -628,6 +666,12 @@ bool sieqs(const std::string &s1, const std::string &s2) { return (sicmp(s1,s2)=
 
 bool scontain(const std::string &data, const std::string &fragment) { return (data.find(fragment)!=std::string::npos); }
 bool sicontain(const std::string &data, const std::string &fragment) { return scontain(lcase(data), lcase(fragment)); }
+
+bool scontainany(const std::string &s, const std::string &charlist)
+{
+    for (auto c:s) if (charlist.find(c)!=std::string::npos) return true;
+	return false;
+}
 
 bool hextoch(const std::string &shex, char &ch) //shex <- { "00", "01", ... , "fe", "ff" }
 {
@@ -681,7 +725,7 @@ void fshex(const std::string &sraw, std::string &shex, int rawlen)
 	for (i=0; i<l; i++) { u=sraw[i]; if (((u>=32)&&(u<=126))||((u>159)&&(u<255))) shex+=c2s(u); else shex+='.'; }
 }
 
-const std::string ashex(const std::string &sraw)
+std::string ashex(const std::string &sraw)
 {
 	std::string s("");
 	unsigned int i;
@@ -702,8 +746,7 @@ std::string asbin(unsigned char u)
 	return s;
 }
 
-//const std::string esc_quotes(const std::string &s)
-const std::string en_quote(const std::string &s, char Q)
+std::string en_quote(const std::string &s, char Q)
 {
 //	std::stringstream ss;
 //	ss << std::quoted(s);
@@ -716,8 +759,7 @@ const std::string en_quote(const std::string &s, char Q)
 
 }
 
-//const std::string unesc_quotes(const std::string &s)
-const std::string de_quote(const std::string &s)
+std::string de_quote(const std::string &s)
 {
 //	std::stringstream ss(s);
 //	std::string r;
@@ -768,7 +810,7 @@ const std::string de_quote(const std::string &s)
 */
 
 
-const std::string schop(const std::string &s, int nmaxlen, bool bdots)
+std::string schop(const std::string &s, int nmaxlen, bool bdots)
 {
 	std::string w;
 	if (bdots) { nmaxlen-=2; if (nmaxlen<=2) { w=".."; return w; }}
@@ -778,7 +820,7 @@ const std::string schop(const std::string &s, int nmaxlen, bool bdots)
 	return w;
 }
 
-const std::string spad(const std::string &s, int nmaxlen, char c, bool bfront, int tabsize)
+std::string spad(const std::string &s, int nmaxlen, char c, bool bfront, int tabsize)
 {
 	std::string w=s;
 	int nt=0;
@@ -788,7 +830,7 @@ const std::string spad(const std::string &s, int nmaxlen, char c, bool bfront, i
 	return w;
 }
 
-const std::string spadct(const std::string &s, int nmaxlen, char c, bool bfront, int tabcols, int startpos)
+std::string spadct(const std::string &s, int nmaxlen, char c, bool bfront, int tabcols, int startpos)
 {
 	auto NTD=[](int p, int c)->int{ return (((p/c)*c)+c-p-1); }; //Next-Tab-Distance (-1 because 0-based)
 	std::string w{};
@@ -803,7 +845,7 @@ const std::string spadct(const std::string &s, int nmaxlen, char c, bool bfront,
 	return w;
 }
 
-const std::string sfit(const std::string &s, int nmaxlen, int fitbit, char cpad)
+std::string sfit(const std::string &s, int nmaxlen, int fitbit, char cpad)
 {
 	if (nmaxlen<=0) return "";
 	if (nmaxlen<=3) return s.substr(0, nmaxlen);
@@ -1178,7 +1220,7 @@ void splitslr(std::string s, const std::string &sdiv, std::string &l, std::strin
 //--------------------------------------------------------------------------------------------------
 const std::string B64REF="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
-bool b64encode(const std::string &sfrom, std::string &result)
+bool encode_b64(const std::string &sfrom, std::string &result)
 {
 	result.clear();
 	if (sfrom.empty()) return true; //empty==empty!
@@ -1228,7 +1270,7 @@ const int B64INDEX[123] =
 	0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, 62, 63, 62, 62, 63, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61,  0,  0,  0,  0,  0,  0,
 	0,  0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,  0,  0,  0,  0, 63,
 	0, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51 };
-bool b64decode(const std::string &sfrom, std::string &result)
+bool decode_b64(const std::string &sfrom, std::string &result)
 {
 	result.clear();
 	if (sfrom.empty()) return true; //empty==empty!
@@ -1289,17 +1331,6 @@ bool GetSystemEnvironment(SystemEnvironment &SE)
 }
 
 //--------------------------------------------------------------------------------------------------
-const std::string to_sKMGT(size_t n)
-{
-	std::string s("");
-	int i=0,t;
-	double f=n;
-	while (f>1024.0) { i++; f/=1024.0; }
-	t=(int)(f*100.0); f=((double)t/100.0);
-	return says(f, i["bKMGTPEZY"]);
-}
-
-//--------------------------------------------------------------------------------------------------
 
 #if defined(PLATFORM_POSIX) || defined(__linux__) || defined(unix) || defined(__unix__) || defined(__unix)
 struct dirent *ReadDir(DIR *pd) //wrapper to discard '.' and '..' entries
@@ -1317,7 +1348,7 @@ inline void clear_fs_err() { FILESYS_ERROR.clear(); }
 inline bool fs_err(const std::string &e) { FILESYS_ERROR=e; return false; }
 std::string filesys_error() { return FILESYS_ERROR; }
 
-FS_TYPE direnttypetoFST(unsigned char uc)
+FST direnttypetoFST(unsigned char uc)
 {
 	switch(uc)
 	{
@@ -1332,7 +1363,7 @@ FS_TYPE direnttypetoFST(unsigned char uc)
 	}
 }
 
-FS_TYPE modetoFST(int stm)
+FST modetoFST(int stm)
 {
 	switch(stm&S_IFMT)
 	{
@@ -1346,7 +1377,7 @@ FS_TYPE modetoFST(int stm)
 		default: return FST_UNKNOWN;
 	}
 }
-FS_TYPE FSYStoFST(FSYS::file_type ft)
+FST FSYStoFST(FSYS::file_type ft)
 {
 	switch(ft)
 	{
@@ -1361,7 +1392,7 @@ FS_TYPE FSYStoFST(FSYS::file_type ft)
 	}
 }
 
-std::string FSTName(FS_TYPE fst, bool bshort)
+std::string FSTName(FST fst, bool bshort)
 {
 	switch(fst)
 	{
@@ -1550,7 +1581,7 @@ size_t fssize(const std::string &sfs)
 }
 
 //------------------------------------------------
-const std::string path_append(const std::string &sPath, const std::string &sApp)
+std::string path_append(const std::string &sPath, const std::string &sApp)
 {
 	if (sApp.empty()) return sPath;
 	std::string sl=sPath, sr=sApp;
@@ -1592,32 +1623,30 @@ bool path_realize(const std::string &spath)
 	return true;
 }
 	
-const std::string path_path(const std::string &spath) //returns all to L of last dir-separator
+std::string path_path(const std::string &spath) //returns all to Left of last dir-separator
 {
 	std::string r(spath);
-	std::string sep{};
-#if defined(PLATFORM_POSIX) || defined(__linux__) || defined(unix) || defined(__unix__) || defined(__unix)
-	sep="/";
-#elif defined(_WIN64)
-	sep="\\";
+	char sep{'/'};
+	size_t p{0};
+#if defined(_WIN64)
+	sep='\\';
 #endif
-	//RTRIM(r, sep.c_str());
-	size_t p=r.rfind(sep[0]);
-	if (p!=std::string::npos) r=r.substr(0, p);
+	if ((r.size()>1)&&(r[r.size()-1]==sep)) { RTRIM(r, std::string{sep}.c_str()); return r; }
+	p=r.rfind(sep);
+	if (p!=std::string::npos) r=r.substr(0, p); else r.clear();
 	return r;
 }
 
-const std::string path_name(const std::string &spath)
+std::string path_name(const std::string &spath)
 {
 	std::string r(spath);
-	std::string sep{};
-#if defined(PLATFORM_POSIX) || defined(__linux__) || defined(unix) || defined(__unix__) || defined(__unix)
-	sep="/";
-#elif defined(_WIN64)
-	sep="\\";
+	char sep{'/'};
+	size_t p{0};
+#if defined(_WIN64)
+	sep='\\';
 #endif
-	if (r.size()>1) RTRIM(r, sep.c_str());
-	size_t p=r.rfind(sep[0]);
+	if (r.size()>1) RTRIM(r, std::string{sep}.c_str());
+	p=r.rfind(sep);
 	if ((p!=std::string::npos)&&(p<r.size())) r=r.substr(p+1);
 	return r;
 }
@@ -1674,14 +1703,14 @@ std::string getcurpath()
 	return s;
 }
 
-FS_TYPE getfsitemtype(const std::string &se)
+FST getfsitemtype(const std::string &se)
 {
-	FS_TYPE ft=FST_UNKNOWN;
+	FST ft=FST_UNKNOWN;
 	fsexist(se, &ft);
 	return ft;
 }
 
-bool fsexist(const std::string &sfs, FS_TYPE *ptype)
+bool fsexist(const std::string &sfs, FST *ptype)
 {
 	bool b{false};
 	FSInfo fi;
@@ -1867,7 +1896,7 @@ bool realizetree(const std::string &sdir, DirTree &tree)
 	return b;
 }
 
-const std::string getrelativepathname(const std::string &sroot, const std::string &spath)
+std::string getrelativepathname(const std::string &sroot, const std::string &spath)
 {
 	size_t n=sroot.size();
 	std::string srel("");
@@ -1876,7 +1905,7 @@ const std::string getrelativepathname(const std::string &sroot, const std::strin
 }
 
 #if defined(PLATFORM_POSIX) || defined(__linux__) || defined(unix) || defined(__unix__) || defined(__unix)
-const std::string getlinktarget(const std::string &se) //was getsymlinktarget
+std::string getlinktarget(const std::string &se) //was getsymlinktarget
 {
 	std::string sl("");
 	char buf[4096];
@@ -1911,6 +1940,15 @@ bool isnontextfile(const std::string sF)
 		for (size_t i=0; i<std::min(d.size(),size_t(2000)); i++) { if (!d[i]) return true; }
 	}
 	return false;
+}
+
+bool istextfile(std::string sf)
+{
+#if defined(PLATFORM_POSIX) || defined(__linux__) || defined(unix) || defined(__unix__) || defined(__unix)
+	return istxtfile(sf);
+#else
+	return is_text_file(sf);
+#endif	
 }
 
 //todo...following is..() are q&d's, fix proper, check magic-bytes, sig's etc...
@@ -2076,7 +2114,7 @@ DTStamp get_dtmodified(const std::string sf)
 
 #if defined(PLATFORM_POSIX) || defined(__linux__) || defined(unix) || defined(__unix__) || defined(__unix)
 
-	const std::string get_owner(const std::string sf)
+	std::string get_owner(const std::string sf)
 	{
 		std::string so("unknown");
 		FSInfo fi;
@@ -2105,7 +2143,7 @@ DTStamp get_dtmodified(const std::string sf)
 #include "aclapi.h"
 //#pragma comment(lib, "advapi32.lib")
 
-	const std::string get_owner(const std::string &sf)
+	std::string get_owner(const std::string &sf)
 	{
 		HANDLE hFile;
 		PSID pSidOwner=NULL;
@@ -2280,14 +2318,14 @@ bool setpermissions(const std::string, int, bool)//(const std::string sN, int pr
 
 #endif
 
-const std::string getrightsRWX(size_t r) //using retval from getrights()...
+std::string getrightsRWX(size_t r) //using retval from getrights()...
 {
 	std::string s{};
 	s=says(((r&4)==4)?"r":"_", ((r&2)==2)?"w":"_", ((r&1)==1)?"x":"_");
 	return s;
 }
 
-const std::string getrightsRWX(const std::string sN)
+std::string getrightsRWX(const std::string sN)
 {
 	return getrightsRWX(getrights(sN));
 }
@@ -2295,7 +2333,7 @@ const std::string getrightsRWX(const std::string sN)
 //------------------------------------------------
 bool dir_exist(const std::string &sdir)
 {
-	FS_TYPE t;
+	FST t;
 	return (fsexist(sdir, &t)&&isdirtype(t));
 }
 
@@ -2498,7 +2536,7 @@ size_t dir_content_size(const std::string sdir)
 //------------------------------------------------
 bool file_exist(const std::string &sfile) //true iff existing reg-file
 {
-	FS_TYPE t; //=getfsitemtype(sfile);
+	FST t; //=getfsitemtype(sfile);
 	return (fsexist(sfile, &t)&&isfiletype(t));
 }
 

@@ -145,6 +145,12 @@ template<typename K, typename V=K> struct MType : std::map<K, V>
 	inline void Drop(const K &k)				{ MT::erase(k); }
 	inline const V Get(const K &k) const		{ V v{}; if (HasKey(k)) v=MT::at(k); return v; }
 	inline void Set(const K &k, const V &v)		{ (*this)[k]=v; } //add/replace value
+	//fixme: this should only apply if K & V can stream(has operator<<() [& >>()] defined)
+	friend std::ostream& operator<<(std::ostream &os, const MType &m)
+		{
+			for (auto p:m) { os << p.first << "=" << p.second << "\n"; }
+			return os;
+		}
 };
 
 typedef MType<std::string> MSTR;
@@ -168,7 +174,6 @@ struct MVSTR : std::map<std::string, VSTR >
 //--------------------------------------------------------------------------------------------------
 struct NOCOPY { private: NOCOPY(const NOCOPY&)=delete; NOCOPY& operator=(const NOCOPY&)=delete; public: NOCOPY(){}};
 
-
 //--------------------------------------------------------------------------------------------------system-error-logging-etc
 std::string get_error_report();
 void clear_error_report();
@@ -181,7 +186,6 @@ void clear_utilfuncs_error();
 bool set_utilfuncs_error(const std::string &serr, bool btell=false);
 
 //--------------------------------------------------------------------------------------------------
-
 void WRITESTRING(const std::string &s);
 std::string READSTRING(const std::string &sprompt);
 
@@ -189,46 +193,45 @@ std::string READSTRING(const std::string &sprompt);
 void MsgOK(std::string msg, std::string title="Message");
 #endif
 
+//--------------------------------------------------------------------------------------------------
 std::string askuser(const std::string &sprompt);
 bool askok(const std::string &smsg);
-
 void waitenter(const std::string &msg="");
 bool checkkeypress(int k);
-
 bool askpass(std::string &pw); //cli-only
 
+//--------------------------------------------------------------------------------------------------
 #if defined(PLATFORM_POSIX) || defined(__linux__) || defined(unix) || defined(__unix__) || defined(__unix)
 bool validate_app_path(std::string sFP, std::string &sRet);
 #endif
 
+//--------------------------------------------------------------------------------------------------
 std::string thisapp();
 std::string username(); //current user
 std::string username(int uid);
 std::string homedir();
 std::string hostname();
 
+//--------------------------------------------------------------------------------------------------
 //process (using /proc, etc)
 pid_t find_pid(const std::string &spath);
 bool kill_pid(pid_t pid);
 void kill_self();
 bool kill_app(const std::string &spath);
 
-
+//--------------------------------------------------------------------------------------------------
 #if defined(PLATFORM_POSIX) || defined(__linux__) || defined(unix) || defined(__unix__) || defined(__unix)
 	int realuid();
 	int effectiveuid();
 	bool has_root_access();
 #endif
 
-
 //--------------------------------------------------------------------------------------------------
-
 template<typename...P> void say(P...p) { std::string r{}; std::stringstream ss(""); (ss<<...<<p); r=ss.str(); WRITESTRING(r); }
 template<typename...P> std::string says(P...p) { std::string r{}; std::stringstream ss(""); (ss<<...<<p); r=ss.str(); return r; }
 template<typename...P> void sayss(std::string &s, P...p) { std::string r{}; std::stringstream ss(""); (ss<<...<<p); r=ss.str();  s+=r; } //APPENDS! to s!
 template<typename...P> bool sayerr(P...p) { std::string r{}; std::stringstream ss(""); ss<<"error: "; (ss<<...<<p); r=ss.str(); WRITESTRING(r); return false; }
 template<typename...P> bool sayfail(P...p) { std::string r{}; std::stringstream ss(""); ss<<"fail: "; (ss<<...<<p); r=ss.str(); WRITESTRING(r); return false; }
-
 
 //--------------------------------------------------------------------------------------------------
 //unpacks variadic into csv-string (found this somewhere, dunno how or why (or if) it works!?!?)
@@ -290,7 +293,6 @@ template<typename T> T MAX(T t) { return t; }
 template<typename T> T MAX(T h, T t) { return (h>t)?h:t; }
 template<typename R, typename...T> R MAX(R h, R v, T...t) { R r=(h>v)?h:v; r=MAX(r, t...); return r; }
 template<typename R, typename V, typename...T> auto MAX(R h, V v, T...t) { auto r=(h>v)?h:v; r=MAX(r, t...); return r; }
-
 template<typename T=int> T MIN() { return std::numeric_limits<T>::min(); }
 template<typename T> T MIN(T t) { return t; }
 template<typename T> T MIN(T h, T t) { return (h<t)?h:t; }
@@ -326,6 +328,9 @@ inline double degtorad(double deg) { return (deg*PI/180); }
 inline double radtodeg(double rad) { return (rad*180/PI); }
 
 //--------------------------------------------------------------------------------------------------
+std::string to_sKMGT(size_t n); //1024, Kilo/Mega/Giga/Tera/Peta/Exa/Zetta/Yotta
+
+//--------------------------------------------------------------------------------------------------
 __attribute__((always_inline)) inline void kips(int sec) { std::this_thread::sleep_for(std::chrono::seconds(sec)); } //1.0
 __attribute__((always_inline)) inline void kipm(int milsec) { std::this_thread::sleep_for(std::chrono::milliseconds(milsec)); } //0.001 (x/1 000)
 __attribute__((always_inline)) inline void kipu(int microsec) { std::this_thread::sleep_for(std::chrono::microseconds(microsec)); } //0.000 001 (x/1 000 000)
@@ -342,7 +347,6 @@ template<typename T> T randominrange(T least, T most)
 	int M;
 	int R;
 	T t;
-	///M=(most<10)?10:(most<100)?100:(most<1000)?1000:(most<10000)?10000:(most<100000)?100000:1000000;
 	M=(most<10000)?10000:10000000;
 	std::uniform_int_distribution<int> uid(0, M);
 	std::random_device rd;
@@ -353,14 +357,15 @@ template<typename T> T randominrange(T least, T most)
 
 //--------------------------------------------------------------------------------------------------
 typedef uint64_t DTStamp;
-DTStamp make_dtstamp(struct tm *ptm, uint64_t usecs=0);
-DTStamp dt_stamp(); //now
-std::string ymdhms_stamp();
-const std::string h_dt_stamp(); //human-readable: "0y0m0d0H0M0Sxx" (e.g.: "181123111051A3"=>2018 Nov 23 11:10:51 (xx/A3 = reduced-microsec-suffix)
-DTStamp ToDTStamp(const std::string &yyyymmddHHMMSS); //HHMMSS-optional
-const std::string month_name(int m, bool bfull=true);
+DTStamp			make_dtstamp(struct tm *ptm, uint64_t usecs=0);
+DTStamp			dt_stamp(); //now
+std::string		ymdhms_stamp();
+std::string		h_dt_stamp(); //human-readable: "0y0m0d0H0M0Sxx" (e.g.: "181123111051A3"=>2018 Nov 23 11:10:51 (xx/A3 = reduced-microsec-suffix)
+DTStamp			ToDTStamp(const std::string &yyyymmddHHMMSS); //HHMMSS-optional
+std::string		month_name(int m, bool bfull=true);
+
 enum { DS_FULL=0, DS_SHORT, DS_COMPACT, DS_SQUASH };
-const std::string ToDateStr(DTStamp dts, int ds=DS_SHORT, bool btime=true, bool bmsec=false);
+std::string		ToDateStr(DTStamp dts, int ds=DS_SHORT, bool btime=true, bool bmsec=false);
 /*
 	DS_FULL			ccyy month dd[ HH:MM:SS[.u...]]
 	DS_SHORT		ccyy mon dd[ HH:MM:SS[.u...]]
@@ -370,19 +375,20 @@ const std::string ToDateStr(DTStamp dts, int ds=DS_SHORT, bool btime=true, bool 
 
 inline bool is_leap_year(int y) { return (((y%4==0)&&(y%100!= 0))||(y%400==0)); }
 
+//--------------------------------------------------------------------------------------------------
 uint64_t get_unique_index();
 std::string get_unique_name(const std::string sprefix="U", const std::string ssuffix="");
-//--------------------------------------------------------------------------------------------------
 inline bool isvalidname(const std::string &sN) { return (sN.find('/')==std::string::npos); } //applies to bash
 inline bool is_name_char(int c)	{ return (((c>='0')&&(c<='9')) || ((c>='A')&&(c<='Z')) || ((c>='a')&&(c<='z')) || (c=='_')); }
-// bash/linux...
-const std::string bash_escape_name(const std::string &name);
 
+//--------------------------------------------------------------------------------------------------
+// bash/linux...
+std::string bash_escape_name(const std::string &name);
+inline std::string bash_safe_name(const std::string &name) { return bash_escape_name(name); }
 
 //--------------------------------------------------------------------------------------------------
 template<typename TypePtr> size_t p2t(TypePtr p) { union { TypePtr u; size_t n; }; u=p; return n; } //??todo...risky...test where used...
 template<typename TypePtr> TypePtr t2p(size_t t) { union { TypePtr u; size_t n; }; n=t; return u; }
-
 
 //--------------------------------------------------------------------------------------------------string-related
 ///todo: whitespace chars - beep, para.., backspace, etc
@@ -392,17 +398,20 @@ void RTRIM(std::string& s, const char *sch=WHITESPACE_CHARS);
 void TRIM(std::string& s, const char *sch=WHITESPACE_CHARS);
 void ReplacePhrase(std::string &sTarget, const std::string &sPhrase, const std::string &sReplacement); //each occ of phrase with rep
 void ReplaceChars(std::string &sTarget, const std::string &sChars, const std::string &sReplacement); //each occ of each char from chars with rep
-const std::string SanitizeName(const std::string &sp); //replaces non-alphanums with underscores: "a, b\t c" -> "a_b_c"
+std::string SanitizeName(const std::string &sp); //replaces non-alphanums with underscores: "a, b\t c" -> "a_b_c"
+std::string EscapeChars(const std::string &raw, const std::string &sChars); //insert '\' before each occurrence of each char in sChars and '\' itself
+std::string UnescapeChars(const std::string &sesc); //remove '\' from escaped chars, retain escaped '\' itself
 
-const std::string ucase(const char *sz); //ascii-only todo: also do unicode upper/lower cases
-const std::string lcase(const char *sz);
-
+//--------------------------------------------------------------------------------------------------
+std::string ucase(const char *sz); //ascii-only todo: also do unicode upper/lower cases
+std::string lcase(const char *sz);
 // ***** See also: uucase(), ulcase(), touucase(), toulcase() in uul.h/cpp *****
 inline std::string ucase(const std::string &s) { return ucase(s.c_str()); }
 inline void toucase(std::string& s) { s=ucase(s.c_str()); }
 inline std::string lcase(const std::string &s) { return lcase(s.c_str()); }
 inline void tolcase(std::string &s) { s=lcase(s.c_str()); }
 
+//--------------------------------------------------------------------------------------------------
 template<typename L, typename R> int scmp(const L &l, const R &r) { std::string ll(l), rr(r); return ll.compare(rr); }
 template<typename L, typename R> int sicmp(const L &l, const R &r) { std::string ll(l), rr(r); return ucase(ll).compare(ucase(rr)); }
 template<typename L, typename R=L> bool seqs(const L &l, const R &r) { return (scmp(l,r)==0); }
@@ -410,31 +419,33 @@ template<typename L, typename R=L> bool sieqs(const L &l, const R &r) { return (
 
 bool scontain(const std::string &data, const std::string &fragment); //case-sensitive
 bool sicontain(const std::string &data, const std::string &fragment); //not case-sensitive
+bool scontainany(const std::string &s, const std::string &charlist); //checks for each char in list
 
+//--------------------------------------------------------------------------------------------------
 inline bool is_digit(unsigned char c) { return ((c>='0')&&(c<='9')); }
 inline bool is_letter(unsigned char c) { return (((c>='A')&&(c<='Z'))||((c>='a')&&(c<='z'))); }
 inline bool is_ascii(unsigned char c) { return (c<=127); }
 
+//--------------------------------------------------------------------------------------------------
 //see also 'tohex'-template below
 bool hextoch(const std::string &shex, char &ch); //expect shex <- { "00", "01", ... , "fe", "ff" }
 int shextodec(const std::string &shex); //shex contain hexdigits (eg "1E23A" or "1e23a" or "0x1E23A" or "0x1e23a" or "0X1E23A" or "0X1e23a")
 void fshex(const std::string &sraw, std::string &shex, int rawlen=0); //format rawlen(0=>all) chars to hex
-const std::string ashex(const std::string &sraw); //format raw chars to "HE XH EX HE ..."
+std::string ashex(const std::string &sraw); //format raw chars to "HE XH EX HE ..."
 std::string ashex(unsigned char u);
 std::string asbin(unsigned char u); //0's& 1's...
 
-//const std::string esc_quotes(const std::string &s);
-const std::string en_quote(const std::string &s, char Q='"'); //use any char to 'quote-enclose' string
-//const std::string unesc_quotes(const std::string &s);
-const std::string de_quote(const std::string &s);
+//--------------------------------------------------------------------------------------------------
+std::string en_quote(const std::string &s, char Q='"'); //use any char to 'quote-enclose' string
+std::string de_quote(const std::string &s);
 
-//renamed from ..s to s.. without bothering to check usages - LOLMFAO!
-const std::string schop(const std::string &s, int nmaxlen, bool bdots=true); //appends ".." to string
-const std::string spad(const std::string &s, int nmaxlen, char c=' ', bool bfront=true, int tabsize=4);
-//fixed-Column-Tab-positions..
-const std::string spadct(const std::string &s, int nmaxlen, char c=' ', bool bfront=true, int tabcols=4, int startpos=0);
+//--------------------------------------------------------------------------------------------------
+std::string schop(const std::string &s, int nmaxlen, bool bdots=true); //appends ".." to string
+std::string spad(const std::string &s, int nmaxlen, char c=' ', bool bfront=true, int tabsize=4);
+//fixed-column Tab-positions..
+std::string spadct(const std::string &s, int nmaxlen, char c=' ', bool bfront=true, int tabcols=4, int startpos=0);
 
-template<typename T> const std::string pads(T t, int nmaxlen, char c=' ', bool bfront=true, int tabsize=4)
+template<typename T> std::string pads(T t, int nmaxlen, char c=' ', bool bfront=true, int tabsize=4) //todo ?tabsize?
 {
 	std::string s{};
 	int nt=0;
@@ -444,9 +455,9 @@ template<typename T> const std::string pads(T t, int nmaxlen, char c=' ', bool b
 	return s;
 }
 
-/// use one function to set fixed-length string, cater for dots front, mid, back, padding front/back, centering ...
+//set fixed-length string, cater for dots front, mid, back, padding front/back, centering ...
 enum { FIT_NONE=0, FIT_L=1, FIT_M=2, FIT_R=4, FIT_DOT=8, FIT_PAD=32, };
-const std::string sfit(const std::string &s, int nmaxlen, int fitbit=FIT_NONE, char cpad=' ');
+std::string sfit(const std::string &s, int nmaxlen, int fitbit=FIT_NONE, char cpad=' ');
 
 std::string slcut(std::string &S, size_t n); //resizes S, returns cut from front (cutting chunks off S until S is empty)
 std::string srcut(std::string &S, size_t n); //resizes S, returns cut from back
@@ -469,20 +480,14 @@ typedef uint32_t unicodepoint;
 const unicodepoint INVALID_UCP=0xfffd; //'�'
 const std::string INVALID_UTF8="\ufffd";
 
-unicodepoint u8toU(std::string u8);
-std::string Utou8(unicodepoint U);
-
-bool isvalidu8(const std::string &s);
-
-std::string u8charat(const std::string &s, size_t &upos); //inc's upos to next utf8-char
-
-size_t u8charcount(const std::string &s); //u8 char can be 1 to 4 bytes in size
-
-std::string u8substr(const std::string &s, size_t pos, size_t len=0);
-
-size_t u8charpostobytepos(const std::string &s, size_t pos); //pos=char-pos, ret-val is byte-count to start of char at charpos
-
-void u8insert(std::string &su8, const std::string &sins, size_t pos); //inserts or appends
+unicodepoint	u8toU(std::string u8);
+std::string		Utou8(unicodepoint U);
+bool			isvalidu8(const std::string &s);
+std::string		u8charat(const std::string &s, size_t &upos); //inc's upos to next utf8-char
+size_t			u8charcount(const std::string &s); //u8 char can be 1 to 4 bytes in size
+std::string		u8substr(const std::string &s, size_t pos, size_t len=0);
+size_t			u8charpostobytepos(const std::string &s, size_t pos); //pos=char-pos, ret-val is byte-count to start of char at charpos
+void			u8insert(std::string &su8, const std::string &sins, size_t pos); //inserts or appends
 
 //--------------------------------------------------------------------------------------------------
 enum //GReeK-chars
@@ -502,9 +507,7 @@ inline std::string greekletter(int g, bool bUcase=false)
 	return l;
 }
 
-
-//--------------------------------------------------------------------------------------------------
-//simple encryption
+//--------------------------------------------------------------------------------------------------simple encryption
 void encs(const std::string &raw, std::string &enc, const std::string &pw="");
 void decs(const std::string &enc, std::string &raw, const std::string &pw="");
 std::string encs(const std::string &raw, const std::string &pw="");
@@ -512,35 +515,27 @@ std::string decs(const std::string &enc, const std::string &pw="");
 
 //--------------------------------------------------------------------------------------------------
 size_t splitslist(const std::string &list, char delim, VSTR &vs, bool bIncEmpty=true);
-//size_t splitsslist(const std::string &list, const std::string &delim, VSTR &vs, bool bIncEmpty=true);
 size_t splitslist(const std::string &list, const std::string &delim, VSTR &vs, bool bIncEmpty=true);
-//size_t splitqslist(const std::string &list, char delim, VSTR &vs, bool bIncEmpty); todo...
+//size_t splitqslist(const std::string &list, char delim, VSTR &vs, bool bIncEmpty); todo quoted strings
 void splitslen(const std::string &src, size_t len, VSTR &vs); //copy len-sized substrings from s to vs
 void splitslr(std::string s, char cdiv, std::string &l, std::string &r); //split s on first cdiv into l & r
 void splitslr(std::string s, const std::string &sdiv, std::string &l, std::string &r); //split s on first sdiv into l & r
 
-
 //--------------------------------------------------------------------------------------------------
-bool b64encode(const std::string &sfrom, std::string &result);
-bool b64decode(const std::string &sfrom, std::string &result);
-inline std::string b64encode(const std::string &sfrom) { std::string s; if (!b64encode(sfrom, s)) s.clear(); return s; }
-inline std::string b64decode(const std::string &sfrom) { std::string s; if (!b64decode(sfrom, s)) s.clear(); return s; }
+bool encode_b64(const std::string &sfrom, std::string &result);
+bool decode_b64(const std::string &sfrom, std::string &result);
+inline std::string encode_b64(const std::string &sfrom) { std::string s; if (!encode_b64(sfrom, s)) s.clear(); return s; }
+inline std::string decode_b64(const std::string &sfrom) { std::string s; if (!decode_b64(sfrom, s)) s.clear(); return s; }
 
-
-//--------------------------------------------------------------------------------------------------
-const std::string to_sKMGT(size_t n); //1024, Kilo/Mega/Giga/Tera/Peta/Exa/Zetta/Yotta
-
+//===================================================================================================filesystem-related
+std::string filesys_error(); //applies to bool functions below
 
 //--------------------------------------------------------------------------------------------------
 typedef std::map<std::string, std::string> SystemEnvironment; //[key-name]=value
 bool GetSystemEnvironment(SystemEnvironment &SE);
 
-
-//===================================================================================================filesystem-related
-std::string filesys_error(); //applies to bool functions below
-
-#define FS_TYPE int
-enum //FS_TYPE - easier as generic int type
+#define FST int
+enum //FST - easier as generic int type
 {
 	FST_UNKNOWN = 0,
 	FST_FILE = 1,
@@ -552,10 +547,10 @@ enum //FS_TYPE - easier as generic int type
 	FST_CDEV = 64,
 };
 
-FS_TYPE direnttypetoFST(unsigned char uc);
-FS_TYPE modetoFST(int stm);
-FS_TYPE FSYStoFST(FSYS::file_type ft);
-std::string FSTName(FS_TYPE fst, bool bshort=false);
+FST direnttypetoFST(unsigned char uc);
+FST modetoFST(int stm);
+FST FSYStoFST(FSYS::file_type ft);
+std::string FSTName(FST fst, bool bshort=false);
 
 //-------------------------------------------------------MIME
 std::string GetMimeType(const std::string &se);
@@ -567,7 +562,7 @@ struct FSInfo //File-System-Entity-..
 	std::string path;
 	uint32_t owner_id;
 	uint32_t group_id;
-	FS_TYPE type;
+	FST type;
 	uint8_t rights_owner; //4|2|1: r=(rights_owner&4), ...
 	uint8_t rights_group;
 	uint8_t rights_other;
@@ -596,12 +591,18 @@ struct FSInfo //File-System-Entity-..
 	FSInfo() { clear(); }
 };
 
+
+/*
+	TODO: whereever file & path names are used and it is linux -> bash_safe_name(..)
+*/
+
+
+
 enum MimeFlag { MF_NONE=0, MF_MIME, MF_MIMEEXT, };
 bool getstatx(FSInfo &FI, const std::string &sfe, MimeFlag mimeflag=MF_NONE);
 
-
 //-------------------------------------------------------
-typedef std::map<std::string, FS_TYPE> DirEntries;
+typedef std::map<std::string, FST> DirEntries;
 struct DirTree : public std::map<std::string, DirTree> //[RELATIVE!!-to-dirpath-name]=..whatever-it-contains..
 {
 	/*
@@ -622,10 +623,10 @@ struct DirTree : public std::map<std::string, DirTree> //[RELATIVE!!-to-dirpath-
 size_t fssize(const std::string &sfs);
 
 //path..
-const std::string path_append(const std::string &spath, const std::string &sapp); // (/a/b/c, d) => /a/b/c/d
+std::string path_append(const std::string &spath, const std::string &sapp); // (/a/b/c, d) => /a/b/c/d
 bool path_realize(const std::string &sfullpath); //full PATH only!, a file-name will create dir with that name!
-const std::string path_path(const std::string &spath); //excludes last name (/a/b/c/d => /a/b/c)
-const std::string path_name(const std::string &spath); //only last name (/a/b/c/d => d)
+std::string path_path(const std::string &spath); //excludes last name (/a/b/c/d => /a/b/c)
+std::string path_name(const std::string &spath); //only last name (/a/b/c/d => d)
 std::string path_time(const std::string &spath); //content_change date-time: return format=>"yyyymmddHHMMSS"
 std::string path_time_h(const std::string &spath); //human-readable content_change date-time: return format=>"yyyy-mm-dd HH:MM:SS"
 inline size_t path_size(std::string spath) { return fssize(spath); }
@@ -634,19 +635,19 @@ bool path_max_free(const std::string spath, size_t &max, size_t &free); //space 
 //utility..
 std::string getcurpath(); //current working directory
 
-FS_TYPE getfsitemtype(const std::string &se);
+FST getfsitemtype(const std::string &se);
 inline std::string GetFSType(const std::string &se, bool bshort=false) { return FSTName(getfsitemtype(se), bshort); }
 
 //isdirtype() checks type directly, if symlink then getsymlinktarget() must be used if needed ...
-inline bool isdirtype(FS_TYPE ft) { return (ft==FST_DIR); }
-inline bool isfiletype(FS_TYPE ft) { return (ft==FST_FILE); }
-inline bool islinktype(FS_TYPE ft) { return (ft==FST_LINK); } ///was: issymlinktype
+inline bool isdirtype(FST ft) { return (ft==FST_DIR); }
+inline bool isfiletype(FST ft) { return (ft==FST_FILE); }
+inline bool islinktype(FST ft) { return (ft==FST_LINK); } ///was: issymlinktype
 //ispipetype..
 //issockettype..
 //isdevicetype..
 
 
-bool fsexist(const std::string &sfs, FS_TYPE *ptype=nullptr);
+bool fsexist(const std::string &sfs, FST *ptype=nullptr);
 bool fsdelete(const std::string fd);
 bool fsrename(const std::string &x, const std::string &n); //x=existing full path&name, n=new name only
 bool fscopy(const std::string &src, const std::string &dest, bool bBackupFiles=false, bool bIgnoreSpecial=false);
@@ -655,10 +656,10 @@ bool fscopy(const std::string &src, const std::string &dest, bool bBackupFiles=f
 bool issubdir(const std::string &Sub, const std::string &Dir); //is S a subdir of D; check when Dir is a link---todo
 bool isdirempty(const std::string &D); //also false if D does not exist, or cannot be read
 bool realizetree(const std::string &sdir, DirTree &tree); //creates dirs-only (?? cwd? or sdir must be abs?)
-const std::string getrelativepathname(const std::string &sroot, const std::string &spath); //empty if spath not subdir of sroot
+std::string getrelativepathname(const std::string &sroot, const std::string &spath); //empty if spath not subdir of sroot
 
 #if defined(PLATFORM_POSIX) || defined(__linux__) || defined(unix) || defined(__unix__) || defined(__unix)
-	const std::string getlinktarget(const std::string &slnk);
+	std::string getlinktarget(const std::string &slnk);
 #endif
 
 //libmagic(3)...
@@ -668,7 +669,8 @@ bool isexefile(const std::string sF); //check if sF is an executable (.EXE or el
 bool isscriptfile(const std::string sF); //bash, perl, (checks #!)
 bool isnontextfile(const std::string sF); //checks if file contains a null-byte
 inline bool isbinaryfile(std::string sf) { return isnontextfile(sf); }
-inline bool istextfile(std::string sf) { return !isbinaryfile(sf); }
+inline bool is_text_file(std::string sf) { return !isbinaryfile(sf); }
+bool istextfile(std::string sf);
 bool ispicturefile(std::string sf); //jpg/png/...
 bool isanimationfile(std::string sf); //gif/tif/...
 bool issoundfile(std::string sf); //mp3/...
@@ -689,7 +691,7 @@ bool ispdffile(std::string sf); //pdf
 
 
 DTStamp get_dtmodified(const std::string sf);
-const std::string get_owner(const std::string sf);
+std::string get_owner(const std::string sf);
 
 //permissions & rights..
 int getpermissions(const std::string sN); //format:777; see getstatx
@@ -704,14 +706,14 @@ bool canread(const std::string sN);
 bool canwrite(const std::string sN);
 bool canexecute(const std::string sN);
 
-const std::string getrightsRWX(size_t r);
-const std::string getrightsRWX(const std::string sN);
+std::string getrightsRWX(size_t r);
+std::string getrightsRWX(const std::string sN);
 
 //dir..
 bool dir_exist(const std::string &sdir);
 inline bool isdir(const std::string &sdir) { return dir_exist(sdir); }
-inline const std::string dir_path(const std::string &sdpath) { return path_path(sdpath); }
-inline const std::string dir_name(const std::string &sdpath) { return path_name(sdpath); }
+inline std::string dir_path(const std::string &sdpath) { return path_path(sdpath); }
+inline std::string dir_name(const std::string &sdpath) { return path_name(sdpath); }
 bool dir_create(const std::string &sdir);
 bool dir_delete(const std::string &sdir);
 
@@ -745,8 +747,8 @@ size_t dir_content_size(const std::string sdir); //count of files & sub-dirs
 //file..
 bool file_exist(const std::string &sfile);
 inline bool isfile(const std::string &sfile) { return file_exist(sfile); }
-inline const std::string file_path(const std::string &sfpath) { return path_path(sfpath); } //("/a/b/c.d") -> "/a/b"
-inline const std::string file_name(const std::string &sfpath) { return path_name(sfpath); } //("/a/b/c.d") -> "c.d"
+inline std::string file_path(const std::string &sfpath) { return path_path(sfpath); } //("/a/b/c.d") -> "/a/b"
+inline std::string file_name(const std::string &sfpath) { return path_name(sfpath); } //("/a/b/c.d") -> "c.d"
 void file_name_ext(const std::string &sfpath, std::string &name, std::string &ext);
 std::string file_name_noext(const std::string &sfpath); //(/a/b/c.d) -> c
 std::string file_extension(std::string sfpath); //(/a/b/c.d) -> d
@@ -794,9 +796,9 @@ template<typename N> N fitrange(N &v, N MIN, N MAX) { if (v<MIN) v=MIN; else if 
 
 
 //NB: use absolute value of N-param...
-//template<typename N>const std::string tohex(N NB_UseAbsoluteValue, unsigned int leftpadtosize=1, char pad='0')
+//template<typename N> std::string tohex(N NB_UseAbsoluteValue, unsigned int leftpadtosize=1, char pad='0')
 //...concepts...
-template<typename N>const std::string tohex(N n, unsigned int leftpadtosize=1, char pad='0')
+template<typename N> std::string tohex(N n, unsigned int leftpadtosize=1, char pad='0')
 {
 	if (!is_numeric(n)) return "NaN";
 	std::string H="";
@@ -806,7 +808,7 @@ template<typename N>const std::string tohex(N n, unsigned int leftpadtosize=1, c
 	return H;
 }
 
-template<typename T> const std::string ttos(const T &v) //TypeTOString
+template<typename T> std::string ttos(const T &v) //TypeTOString
 {
 	//if streamable(T)
     std::ostringstream oss;
