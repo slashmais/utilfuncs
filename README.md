@@ -1,7 +1,7 @@
 # utilfuncs
 
 General-use utility functions<br />
-(live-code updated occasionally)<br />
+(live-code updated as changes & fixes pass testing)<br />
 
 Intended for cross-platform use...<br />
 (The functions have not been (fully) tested on windows (64-bit), only on linux.)<br />
