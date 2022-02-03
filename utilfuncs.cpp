@@ -246,17 +246,50 @@ bool askok(const std::string &smsg)
 	bool has_root_access() { return seqs(username(effectiveuid()), "root"); }
 #endif
 
+//--------------------------------------------------------------------------------------------------
+void default_output_path(std::string &outpath)
+{
+	//order: 1 app-path/, 2 (linux)~/.config/<appname>/, 3 (linux)~/<appname>/ | (win) <homedir>/<app_name_ext>,  4 homedir
+	std::string sapp=thisapp();
+	std::string sp{};
+	sp=path_path(sapp);
+	if (canwrite(sp)) { outpath=sp; return; }
+	std::string sn{};
+	sn=path_name(sapp);
+#if defined(PLATFORM_POSIX) || defined(__linux__) || defined(unix) || defined(__unix__) || defined(__unix)
+		sp=path_append(homedir(), ".config");
+		sp=path_append(sp, sn);
+#elif defined(_WIN64)
+	//sn=file_name_noext(path_name(sapp))
+	sn=SanitizeName(path_name(sapp));
+	sp=path_append(homedir(), sn);
+#endif
+	if (path_realize(sp)) outpath=sp;
+	else outpath=homedir();
+}
+
+//--------------------------------------------------------------------------------------------------
 // bash/linux...
+//see: https://unix.stackexchange.com/questions/347332/what-characters-need-to-be-escaped-in-files-without-quotes
+std::string const ec{" \t!\"'#$&()*,;<>=?[]\\^`{}|~"}; //chars that need to be escaped for bash
+bool is_bash_safe_name(const std::string &sn)
+{
+	if (!sn.size()||(sn[0]=='-')) return false;
+	//std::string ec=" \t!\"'#$&()*,;<>=?[]\\^`{}|~"; //chars that need to be escaped for bash
+	for (auto c:sn) { if (ec.find(c)!=std::string::npos) return false; }
+	return true;
+}
+
 std::string bash_escape_name(const std::string &name)
 {
-	 //see: https://unix.stackexchange.com/questions/347332/what-characters-need-to-be-escaped-in-files-without-quotes
-	std::string ename="", ec=" \t!\"'#$&()*,;<>=?[]\\^`{}|~";
+	std::string ename=""; //, ec=" \t!\"'#$&()*,;<>=?[]\\^`{}|~";
 	char bs=char(92);
 	for (auto c:name) { if (ec.find(c)!=std::string::npos) ename+=bs; ename+=c; }
 	if (ename[0]=='-') ename.insert(0, "./"); //special handling if name starts with a minus
 	return ename;
 }
 
+//--------------------------------------------------------------------------------------------------
 pid_t find_pid(const std::string &spath)
 {
 	pid_t pid{0};
@@ -1330,6 +1363,19 @@ bool GetSystemEnvironment(SystemEnvironment &SE)
 	return !SE.empty();
 }
 
+size_t MaxPathLength()
+{
+	//(it's a mess!)
+#if defined(PLATFORM_POSIX) || defined(__linux__) || defined(unix) || defined(__unix__) || defined(__unix)
+	long n = pathconf(".", _PC_PATH_MAX);
+	if (n<0) n=4097; //n==-1 effectively means unlimited size
+	return size_t(n);
+#elif defined(_WIN64)
+	return size_t(255); //actually 260
+	//if long names are used, prefix path with "\\?\" for 32767 byte length
+#endif
+}
+
 //--------------------------------------------------------------------------------------------------
 
 #if defined(PLATFORM_POSIX) || defined(__linux__) || defined(unix) || defined(__unix__) || defined(__unix)
@@ -1693,10 +1739,11 @@ bool path_max_free(const std::string spath, size_t &max, size_t &free)
 //------------------------------------------------
 std::string getcurpath()
 {
+	size_t MPS=MaxPathLength();
 	std::string s{};
 #if defined(PLATFORM_POSIX) || defined(__linux__) || defined(unix) || defined(__unix__) || defined(__unix)
-	char buf[4096];
-	if (getcwd(buf, 4096)!=nullptr) s=buf;
+	char buf[MPS];
+	if (getcwd(buf, MPS)!=nullptr) s=buf;
 #elif defined(_WIN64)
 	s=(std::string)FSYS::current_path();
 #endif
@@ -1907,10 +1954,11 @@ std::string getrelativepathname(const std::string &sroot, const std::string &spa
 #if defined(PLATFORM_POSIX) || defined(__linux__) || defined(unix) || defined(__unix__) || defined(__unix)
 std::string getlinktarget(const std::string &se) //was getsymlinktarget
 {
+	size_t MPS=MaxPathLength();
 	std::string sl("");
-	char buf[4096];
+	char buf[MPS];
 	int i=0, n;
-	n=readlink(se.c_str(), buf, 4096);
+	n=readlink(se.c_str(), buf, MPS);
 	for (;i<n;i++) sl+=buf[i];
 	sl+='\0';
 	if (sl[0]!='/') { sl=path_append(path_path(se), sl); }
@@ -2763,17 +2811,6 @@ bool file_crc32(const std::string &sfile, uint32_t &crc)
 	return false;
 }
 
-
-bool isencrypted(std::string sf)
-{
-	if (isfile(sf))
-	{
-		//todo .. check for sigs...
-		
-	}
-	return false;
-}
-
 //--------------------------------------------------------------------------------------------------
 bool findfile0(const DirTree &DT, std::string sdir, std::string sfile, std::string &sfound)
 {
@@ -2808,6 +2845,16 @@ bool findfdnamelike(std::string sdir, std::string slike, VSTR &vfound, bool bsam
 	DT.Read(sdir);
 	findfdnamelike0(DT, sdir, slike, vfound, bsamecase);
 	return (vfound.size()>0);
+}
+
+bool isencrypted(std::string sf)
+{
+	if (isfile(sf))
+	{
+		//todo .. check for sigs...
+		
+	}
+	return false;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -2848,14 +2895,16 @@ template<> bool is_numeric <std::string> (std::string s)
 
 //--------------------------------------------------------------------------------------------------
 //explicit specializations of ensv & desv for std::string
-template<> void ensv <std::string> (const std::vector<std::string> &v, char delim, std::string &list, bool bIncEmpty)
+//template<> void ensv <std::string> (const std::vector<std::string> &v, char delim, std::string &list, bool bIncEmpty)
+template<> void ensv <std::string> (const VSTR &v, char delim, std::string &list, bool bIncEmpty)
 {
 	std::ostringstream oss("");
 	for (auto t:v) { if (!oss.str().empty()) oss << delim; oss << t; }
 	list=oss.str();
 }
 
-template<> size_t desv <std::string> (const std::string &list, char delim, std::vector<std::string> &v, bool bIncEmpty, bool bTrimWhitespace)
+//template<> size_t desv <std::string> (const std::string &list, char delim, std::vector<std::string> &v, bool bIncEmpty, bool bTrimWhitespace)
+template<> size_t desv <std::string> (const std::string &list, char delim, VSTR &v, bool bIncEmpty, bool bTrimWhitespace)
 {
 	v.clear();
 	if (!list.empty())

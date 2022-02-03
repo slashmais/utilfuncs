@@ -44,21 +44,22 @@ namespace FSYS=std::filesystem;
 //#include <experimental/filesystem> //NB: need to link with libstdc++fs
 //namespace FSYS=std::experimental::filesystem;
 
-//--------------------------------------------------------------------------------------------------Generic Vector
-enum { SORT_NONE, SORT_ASC, SORT_DESC, };
-
+//--------------------------------------------------------------------------------------------------
 template<typename L, typename R> int scmp(const L &l, const R &r);
 template<typename L, typename R> int sicmp(const L &l, const R &r);
 template<typename L, typename R=L> bool seqs(const L &l, const R &r);
 template<typename L, typename R=L> bool sieqs(const L &l, const R &r);
 
-template<typename T, bool Unique=false> struct VType : public std::vector<T>
+//--------------------------------------------------------------------------------------------------Generic Vector
+enum { SORT_NONE, SORT_ASC, SORT_DESC, };
+
+template<typename T, bool Unique=false, int Sort=SORT_NONE> struct VType : public std::vector<T>
 {
 	//generic vec to supply Add(), Set(), Has(), Drop(), use variadics & optional sort, optional unique
 	
 	using VT=std::vector<T>;
 	bool bUniq{Unique}; //true=>strip dupes on add
-	int sorder{SORT_NONE};
+	int sorder{Sort};
 	void clear()								{ VT::clear(); }
 	bool empty() const							{ return VT::empty(); }
 	virtual ~VType()							{ clear(); }
@@ -115,7 +116,7 @@ template<typename T, bool Unique=false> struct VType : public std::vector<T>
 			while (it!=VT::end()) { if ((*it)==t) { b=true; VT::erase(it++); } else it++; } //remove all
 			if (b) Add(t); //restore 1 entry
 		}
-	//fixme: this should only apply if T can stream(has operator<<() [& >>()] defined)
+	//fixme: this should only apply if T is streamable(has operator<<() [& >>()] defined)
 	friend std::ostream& operator<<(std::ostream &os, const VType &v)
 		{
 			os << "[";
@@ -213,7 +214,12 @@ std::string homedir();
 std::string hostname();
 
 //--------------------------------------------------------------------------------------------------
-//process (using /proc, etc)
+//for creating output files, e.g.: config/db/logs/whatever
+//order: 1 app-path/, 2 (linux)~/.config/<appname>/, 3 (linux)~/<appname>/ | (win) <homedir>/<app_name_ext>/, 4 <homedir>
+void default_output_path(std::string &outpath); //outpath will exist/(be created) as writable directory
+
+//--------------------------------------------------------------------------------------------------
+//linux - processes (using /proc, etc)
 pid_t find_pid(const std::string &spath);
 bool kill_pid(pid_t pid);
 void kill_self();
@@ -248,8 +254,8 @@ void write_to_log(const std::string &slogname, const std::string &sinfo); //crea
 template<typename...T> void logger(T...t) { std::ofstream ofs(homedir()+"/LOGGER.LOG", std::ios::app); (ofs<<...<<t)<<"\n"; ofs.close(); }
 template<typename...T> void logger(const std::string &slogfile, T...t) { std::ofstream ofs(slogfile.c_str(), std::ios::app); (ofs<<...<<t)<<"\n"; ofs.close(); }
 
-//===================================================================================================
-//for debugging
+
+//>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>FOR DEBUGGING & DEV-AID
 inline int trace_sequence() { static int ts{0}; ++ts; return ts; }
 //WhereAmI - WAI
 #define WAI says("*", trace_sequence(), "* TRACE: [", __FILE__, " : ", long(__LINE__), " : ", __func__, "] ")
@@ -273,13 +279,11 @@ template<typename...P> void trace_to_log(P...p) //VERY helpful debugging functio
 		r=ss.str();
 		write_to_log("TRACE.log", r);
 	}
-//===================================================================================================
 
-//housekeeping
 auto to_do=[](std::string s=""){ say("(To do) ", s); };
 #define TODO(m) say("To Do: '", __func__, "', in ", __FILE__, " [", long(__LINE__), "] ", #m)
+//<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
-//#define DEBUG telluser
 
 //--------------------------------------------------------------------------------------------------
 #ifdef MAX
@@ -383,6 +387,7 @@ inline bool is_name_char(int c)	{ return (((c>='0')&&(c<='9')) || ((c>='A')&&(c<
 
 //--------------------------------------------------------------------------------------------------
 // bash/linux...
+bool is_bash_safe_name(const std::string &sn); //todo
 std::string bash_escape_name(const std::string &name);
 inline std::string bash_safe_name(const std::string &name) { return bash_escape_name(name); }
 
@@ -479,17 +484,16 @@ void RTFtostring(const std::string &srtf, std::string &stext); //...cannot remem
 typedef uint32_t unicodepoint;
 const unicodepoint INVALID_UCP=0xfffd; //'�'
 const std::string INVALID_UTF8="\ufffd";
-
+//*** for upper-lower-casing see uul.h/cpp ***
 unicodepoint	u8toU(std::string u8);
 std::string		Utou8(unicodepoint U);
 bool			isvalidu8(const std::string &s);
 std::string		u8charat(const std::string &s, size_t &upos); //inc's upos to next utf8-char
-size_t			u8charcount(const std::string &s); //u8 char can be 1 to 4 bytes in size
+size_t			u8charcount(const std::string &s); //u8 char(=1-4 bytes); std::string::size() = byte-count
 std::string		u8substr(const std::string &s, size_t pos, size_t len=0);
 size_t			u8charpostobytepos(const std::string &s, size_t pos); //pos=char-pos, ret-val is byte-count to start of char at charpos
 void			u8insert(std::string &su8, const std::string &sins, size_t pos); //inserts or appends
 
-//--------------------------------------------------------------------------------------------------
 enum //GReeK-chars
 {
 	GRK_ALPHA,		GRK_BETA,	GRK_GAMMA,	GRK_DELTA,	GRK_EPSILON,
@@ -513,6 +517,8 @@ void decs(const std::string &enc, std::string &raw, const std::string &pw="");
 std::string encs(const std::string &raw, const std::string &pw="");
 std::string decs(const std::string &enc, const std::string &pw="");
 
+
+
 //--------------------------------------------------------------------------------------------------
 size_t splitslist(const std::string &list, char delim, VSTR &vs, bool bIncEmpty=true);
 size_t splitslist(const std::string &list, const std::string &delim, VSTR &vs, bool bIncEmpty=true);
@@ -533,6 +539,8 @@ std::string filesys_error(); //applies to bool functions below
 //--------------------------------------------------------------------------------------------------
 typedef std::map<std::string, std::string> SystemEnvironment; //[key-name]=value
 bool GetSystemEnvironment(SystemEnvironment &SE);
+
+size_t MaxPathLength();
 
 #define FST int
 enum //FST - easier as generic int type
@@ -765,13 +773,9 @@ bool file_move(const std::string &sfile, const std::string &dest, bool bBackup=t
 bool file_backup(std::string sfile); //makes ".~nn~" copy of file
 inline size_t file_size(const std::string &sfile) { return fssize(sfile); }
 bool file_crc32(const std::string &sfile, uint32_t &crc);
-
 bool findfile(std::string sdir, std::string sfile, std::string &sfound);
-
 bool findfdnamelike(std::string sdir, std::string slike, VSTR &vfound, bool bsamecase=true);
-
 bool isencrypted(std::string sf);
-
 
 //--------------------------------------------------------------------------------------------------
 //explicitly specialized to check if a string-content is numeric
@@ -826,7 +830,8 @@ template<typename T> const T stot(const std::string &str) //StringTOType
 }
 
 //explicitly specialized for T==std::string
-template<typename T> void ensv(const std::vector<T> &v, char delim, std::string &list, bool bIncEmpty=true) //EN-[delimiter-]Separated-Values
+//template<typename T> void ensv(const std::vector<T> &v, char delim, std::string &list, bool bIncEmpty=true) //EN-[delimiter-]Separated-Values
+template<typename T> void ensv(const VType<T> &v, char delim, std::string &list, bool bIncEmpty=true) //EN-[delimiter-]Separated-Values
 { //					en-string [from] vector
 	list.clear();
 	std::ostringstream oss("");
@@ -835,7 +840,8 @@ template<typename T> void ensv(const std::vector<T> &v, char delim, std::string 
 }
 
 //explicitly specialized for T==std::string
-template<typename T> size_t desv(const std::string &list, char delim, std::vector<T> &v, bool bIncEmpty=true, bool bTrimWhitespace=false) //DE-[delimiter-]Separated-Values
+//template<typename T> size_t desv(const std::string &list, char delim, std::vector<T> &v, bool bIncEmpty=true, bool bTrimWhitespace=false) //DE-[delimiter-]Separated-Values
+template<typename T> size_t desv(const std::string &list, char delim, VType<T> &v, bool bIncEmpty=true, bool bTrimWhitespace=false) //DE-[delimiter-]Separated-Values
 { //					de-string [to] vector
 	std::istringstream iss(list);
 	std::string s;
@@ -1808,7 +1814,7 @@ template<typename N, int D=2> struct NDVector : public NDPoint<N, D>
 };
 
 template<typename N, int D=2> double dotproduct(const NDVector<N,D> &l, const NDVector<N,D> &r)				{ return (l.dotproduct(r)); }
-template<typename N, int D=2> NDVector<N,D> crossproduct(const NDVector<N,D> &l, const NDVector<N,D> &r)	{ NDVector<N,D> V(l); return V.crossproduct(r); }
+template<typename N, int D=3> NDVector<N,D> crossproduct(const NDVector<N,D> &l, const NDVector<N,D> &r)	{ NDVector<N,D> V(l); return V.crossproduct(r); }
 template<typename N, int D=2> NDVector<N,D> direction(const NDPoint<N,D> &F, const NDPoint<N,D> &T)			{ return (T-F).normalize(); }
 
 //??
@@ -1828,7 +1834,7 @@ template<typename N, int D=2> NDVector<N, D> operator*(int n, const NDVector<N, 
 template<typename N, int D=2> NDVector<N, D> operator/(const NDVector<N, D> &l, double d)	{ NDVector<N, D> p(l); p/=d; return p; }
 template<typename N, int D=2> NDVector<N, D> operator/(const NDVector<N, D> &l, int n)		{ return (l/double(n)); }
 
-
+///todo: matrix (see la3d.h/cpp)
 
 
 
