@@ -247,13 +247,13 @@ bool askok(const std::string &smsg)
 #endif
 
 //--------------------------------------------------------------------------------------------------
-void default_output_path(std::string &outpath)
+bool default_output_path(std::string &outpath)
 {
-	//order: 1 app-path/, 2 (linux)~/.config/<appname>/, 3 (linux)~/<appname>/ | (win) <homedir>/<app_name_ext>,  4 homedir
+	//order: 1 app-path/, 2 (linux)~/.config/<appname>/, 3 (linux)~/<appname>/ | (win)<homedir>/<sanitized-app_name>,  4 homedir
 	std::string sapp=thisapp();
 	std::string sp{};
 	sp=path_path(sapp);
-	if (canwrite(sp)) { outpath=sp; return; }
+	if (canwrite(sp)) { outpath=sp; return true; }
 	std::string sn{};
 	sn=path_name(sapp);
 #if defined(PLATFORM_POSIX) || defined(__linux__) || defined(unix) || defined(__unix__) || defined(__unix)
@@ -264,8 +264,8 @@ void default_output_path(std::string &outpath)
 	sn=SanitizeName(path_name(sapp));
 	sp=path_append(homedir(), sn);
 #endif
-	if (path_realize(sp)) outpath=sp;
-	else outpath=homedir();
+	if (path_realize(sp)) outpath=sp; else outpath=homedir();
+	return canwrite(outpath);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -699,7 +699,6 @@ bool sieqs(const std::string &s1, const std::string &s2) { return (sicmp(s1,s2)=
 
 bool scontain(const std::string &data, const std::string &fragment) { return (data.find(fragment)!=std::string::npos); }
 bool sicontain(const std::string &data, const std::string &fragment) { return scontain(lcase(data), lcase(fragment)); }
-
 bool scontainany(const std::string &s, const std::string &charlist)
 {
     for (auto c:s) if (charlist.find(c)!=std::string::npos) return true;

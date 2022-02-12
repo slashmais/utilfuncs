@@ -41,11 +41,12 @@
 
 #include <filesystem> //c++17! (in gcc v7.1)
 namespace FSYS=std::filesystem;
+//for c++ version < 17:
 //#include <experimental/filesystem> //NB: need to link with libstdc++fs
 //namespace FSYS=std::experimental::filesystem;
 
 //--------------------------------------------------------------------------------------------------
-template<typename L, typename R> int scmp(const L &l, const R &r);
+template<typename L, typename R> int scmp(const L &l, const R &r); //forward decl's
 template<typename L, typename R> int sicmp(const L &l, const R &r);
 template<typename L, typename R=L> bool seqs(const L &l, const R &r);
 template<typename L, typename R=L> bool sieqs(const L &l, const R &r);
@@ -117,6 +118,7 @@ template<typename T, bool Unique=false, int Sort=SORT_NONE> struct VType : publi
 			if (b) Add(t); //restore 1 entry
 		}
 	//fixme: this should only apply if T is streamable(has operator<<() [& >>()] defined)
+	//s'thing like: if (can_stream) [do below] else [return "" (or "binary-data") (or throw?)]
 	friend std::ostream& operator<<(std::ostream &os, const VType &v)
 		{
 			os << "[";
@@ -128,13 +130,13 @@ template<typename T, bool Unique=false, int Sort=SORT_NONE> struct VType : publi
 };
 
 typedef VType<std::string> VSTR;
-typedef VType<std::string, true> VUSTR; //unique entries (no dupes)
+typedef VType<std::string, true, SORT_ASC> VUSSTR; //unique sorted-ascending entries (no dupes)
 
 
 //--------------------------------------------------------------------------------------------------Generic Map
 template<typename K, typename V=K> struct MType : std::map<K, V>
 {
-	// Add() new only & NOT replace; Set() new & replace; rest are just aliases
+	// Add() adds new only & does NOT replace; Set() add's new & replaces; (other methods are just aliases)
 	using MT=std::map<K, V>;
 	void clear()		{ MT::clear(); }
 	bool empty() const	{ return MT::empty(); }
@@ -142,10 +144,10 @@ template<typename K, typename V=K> struct MType : std::map<K, V>
 	MType()				{ clear(); }
 	inline bool HasKey(const K &k) const		{ return (MT::find(k)!=MT::end()); }
 	inline bool HasValue(const V &v) const		{ for (auto p:(*this)) { if (p.second==v) return true; } return false; }
-	inline void Add(const K &k, const V &v)		{ MT::emplace(k, v); } //alias for emplace() - only if key does not exist
+	inline void Add(const K &k, const V &v)		{ MT::emplace(k, v); } //alias for emplace() (adds only if key does not exist)
+	inline void Set(const K &k, const V &v)		{ (*this)[k]=v; } //add/replace value
 	inline void Drop(const K &k)				{ MT::erase(k); }
 	inline const V Get(const K &k) const		{ V v{}; if (HasKey(k)) v=MT::at(k); return v; }
-	inline void Set(const K &k, const V &v)		{ (*this)[k]=v; } //add/replace value
 	//fixme: this should only apply if K & V can stream(has operator<<() [& >>()] defined)
 	friend std::ostream& operator<<(std::ostream &os, const MType &m)
 		{
@@ -155,7 +157,7 @@ template<typename K, typename V=K> struct MType : std::map<K, V>
 };
 
 typedef MType<std::string> MSTR;
-typedef MType<std::string, VSTR> MVSTR;
+template<typename K=std::string> struct MVSTR : public MType<K, VSTR>{};
 
 /*
 struct MVSTR : std::map<std::string, VSTR >
@@ -171,8 +173,8 @@ struct MVSTR : std::map<std::string, VSTR >
 };
 */
 
-
 //--------------------------------------------------------------------------------------------------
+//inherit to make a class non-copyable
 struct NOCOPY { private: NOCOPY(const NOCOPY&)=delete; NOCOPY& operator=(const NOCOPY&)=delete; public: NOCOPY(){}};
 
 //--------------------------------------------------------------------------------------------------system-error-logging-etc
@@ -182,17 +184,18 @@ bool report_error(const std::string &serr, bool btell=true);//=false);
 bool log_report_error(const std::string &serr, bool btell=true);//=false);
 
 //--------------------------------------------------------------------------------------------------user-errors
-std::string get_utilfuncs_error(); //only last error set is kept
+std::string get_utilfuncs_error(); //last error that was set
 void clear_utilfuncs_error();
 bool set_utilfuncs_error(const std::string &serr, bool btell=false);
 
 //--------------------------------------------------------------------------------------------------
-void WRITESTRING(const std::string &s);
-std::string READSTRING(const std::string &sprompt);
+void WRITESTRING(const std::string &s); //cli or gui
+std::string READSTRING(const std::string &sprompt); //cli or gui
 
-#if defined(flagGUI)
-void MsgOK(std::string msg, std::string title="Message");
-#endif
+//don't need - use say()
+//#if defined(flagGUI)
+//void MsgOK(std::string msg, std::string title="Message");
+//#endif
 
 //--------------------------------------------------------------------------------------------------
 std::string askuser(const std::string &sprompt);
@@ -207,16 +210,16 @@ bool validate_app_path(std::string sFP, std::string &sRet);
 #endif
 
 //--------------------------------------------------------------------------------------------------
-std::string thisapp();
+std::string thisapp(); //fullpath
 std::string username(); //current user
 std::string username(int uid);
 std::string homedir();
 std::string hostname();
 
 //--------------------------------------------------------------------------------------------------
-//for creating output files, e.g.: config/db/logs/whatever
+//for creating output files for e.g.: config/db/logs/whatever
 //order: 1 app-path/, 2 (linux)~/.config/<appname>/, 3 (linux)~/<appname>/ | (win) <homedir>/<app_name_ext>/, 4 <homedir>
-void default_output_path(std::string &outpath); //outpath will exist/(be created) as writable directory
+bool default_output_path(std::string &outpath); //outpath will exist/(be created) as writable directory
 
 //--------------------------------------------------------------------------------------------------
 //linux - processes (using /proc, etc)
@@ -233,30 +236,50 @@ bool kill_app(const std::string &spath);
 #endif
 
 //--------------------------------------------------------------------------------------------------
-template<typename...P> void say(P...p) { std::string r{}; std::stringstream ss(""); (ss<<...<<p); r=ss.str(); WRITESTRING(r); }
-template<typename...P> std::string says(P...p) { std::string r{}; std::stringstream ss(""); (ss<<...<<p); r=ss.str(); return r; }
-template<typename...P> void sayss(std::string &s, P...p) { std::string r{}; std::stringstream ss(""); (ss<<...<<p); r=ss.str();  s+=r; } //APPENDS! to s!
-template<typename...P> bool sayerr(P...p) { std::string r{}; std::stringstream ss(""); ss<<"error: "; (ss<<...<<p); r=ss.str(); WRITESTRING(r); return false; }
-template<typename...P> bool sayfail(P...p) { std::string r{}; std::stringstream ss(""); ss<<"fail: "; (ss<<...<<p); r=ss.str(); WRITESTRING(r); return false; }
-
-//--------------------------------------------------------------------------------------------------
-//unpacks variadic into csv-string (found this somewhere, dunno how or why (or if) it works!?!?)
-template<typename H, typename...T> std::string unpack2csv(H h, T...t)
-{
-	std::stringstream ss("");
-	ss << h;
-	(int[]){ 0, (ss<<","<<t, void(), 0)... };
-	return ss.str();
-}
-
-//--------------------------------------------------------------------------------------------------
 void write_to_log(const std::string &slogname, const std::string &sinfo); //create/append to ~/LOGFILES/slogname
-template<typename...T> void logger(T...t) { std::ofstream ofs(homedir()+"/LOGGER.LOG", std::ios::app); (ofs<<...<<t)<<"\n"; ofs.close(); }
-template<typename...T> void logger(const std::string &slogfile, T...t) { std::ofstream ofs(slogfile.c_str(), std::ios::app); (ofs<<...<<t)<<"\n"; ofs.close(); }
+std::string path_append(const std::string &sPath, const std::string &sApp); ///forward decl
+template<typename...T> void logger(T...t)
+	{
+		std::string sp{};
+		default_output_path(sp);
+		sp=path_append(sp, "/LOGGER.LOG");
+		std::ofstream ofs(sp.c_str(), std::ios::app);
+		(ofs<<...<<t)<<"\n";
+		ofs.close();
+	}
+	
+template<typename...T> void logger_file(const std::string &slogfile, T...t)
+	{
+		std::ofstream ofs(slogfile.c_str(), std::ios::app);
+		(ofs<<...<<t)<<"\n";
+		ofs.close();
+	}
 
+//--------------------------------------------------------------------------------------------------
+constexpr int dssprec = (std::numeric_limits<double>::max_digits10 - 1); //the -1 stops filling to the right
+template<typename...P> inline void P2SS(std::string &r, P...p) { std::stringstream ss(""); ss.precision(dssprec); (ss<<...<<p); r=ss.str(); } //?inline speed-up?
+template<typename...P> void say(P...p)					 { std::string r{}; P2SS(r, p...); WRITESTRING(r); }
+template<typename...P> std::string says(P...p)			 { std::string r{}; P2SS(r, p...); return r; }
+template<typename...P> void sayss(std::string &s, P...p) { std::string r{}; P2SS(r, p...); s+=r; } //APPENDS! to s!
+template<typename...P> bool sayerr(P...p)				 { std::string r{}; P2SS(r, p...); WRITESTRING(r); return false; }
+template<typename...P> bool sayfail(P...p)				 { std::string r{}; P2SS(r, p...); WRITESTRING(r); return false; }
+template<typename...P> void saylog(P...p)				 { logger(p...); } //consistency
+
+//--------------------------------------------------------------------------------------------------
+//unpacks variadic into csv-string (only if all in pack can stream)
+//(mostly useful for debugging purposes)
+template<typename H, typename...T> std::string unpack2csv(H h, T...t)
+	{
+		std::stringstream ss("");
+		ss << h;
+		(int[]){ 0, (ss<<", "<<t, void(), 0)... }; //construct throw-away int-array filled with 0's
+		return ss.str();
+	}
+//(reversing above will require the originating types of the values, 
+// better to use tuple or c++20 std::sequence(?))
 
 //>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>FOR DEBUGGING & DEV-AID
-inline int trace_sequence() { static int ts{0}; ++ts; return ts; }
+inline int trace_sequence()	{ static int ts{0}; ++ts; return ts; }
 //WhereAmI - WAI
 #define WAI says("*", trace_sequence(), "* TRACE: [", __FILE__, " : ", long(__LINE__), " : ", __func__, "] ")
 template<typename...P> void trace(P...p)
@@ -280,7 +303,7 @@ template<typename...P> void trace_to_log(P...p) //VERY helpful debugging functio
 		write_to_log("TRACE.log", r);
 	}
 
-auto to_do=[](std::string s=""){ say("(To do) ", s); };
+inline void to_do(std::string s="") { say("(To do) ", s); };
 #define TODO(m) say("To Do: '", __func__, "', in ", __FILE__, " [", long(__LINE__), "] ", #m)
 //<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
@@ -292,16 +315,16 @@ auto to_do=[](std::string s=""){ say("(To do) ", s); };
 #ifdef MIN
 #undef MIN
 #endif
-template<typename T=int> const T MAX() { return std::numeric_limits<T>::max(); }
-template<typename T> T MAX(T t) { return t; }
-template<typename T> T MAX(T h, T t) { return (h>t)?h:t; }
-template<typename R, typename...T> R MAX(R h, R v, T...t) { R r=(h>v)?h:v; r=MAX(r, t...); return r; }
-template<typename R, typename V, typename...T> auto MAX(R h, V v, T...t) { auto r=(h>v)?h:v; r=MAX(r, t...); return r; }
-template<typename T=int> T MIN() { return std::numeric_limits<T>::min(); }
-template<typename T> T MIN(T t) { return t; }
-template<typename T> T MIN(T h, T t) { return (h<t)?h:t; }
-template<typename R, typename...T> R MIN(R h, R v, T...t) { R r=(h<v)?h:v; r=MIN(r, t...); return r; }
-template<typename R, typename V, typename...T> auto MIN(R h, V v, T...t) { auto r=(h<v)?h:v; r=MIN(r, t...); return r; }
+template<typename T=int> const T MAX()	{ return std::numeric_limits<T>::max(); }
+template<typename T> T MAX(T t)			{ return t; }
+template<typename T> T MAX(T h, T t)	{ return (h>t)?h:t; }
+template<typename R, typename...T> R MAX(R h, R v, T...t)	{ R r=(h>v)?h:v; r=MAX(r, t...); return r; }
+template<typename R, typename V, typename...T> auto MAX(R h, V v, T...t)	{ auto r=(h>v)?h:v; r=MAX(r, t...); return r; }
+template<typename T=int> T MIN()		{ return std::numeric_limits<T>::min(); }
+template<typename T> T MIN(T t)			{ return t; }
+template<typename T> T MIN(T h, T t)	{ return (h<t)?h:t; }
+template<typename R, typename...T> R MIN(R h, R v, T...t)	{ R r=(h<v)?h:v; r=MIN(r, t...); return r; }
+template<typename R, typename V, typename...T> auto MIN(R h, V v, T...t)	{ auto r=(h<v)?h:v; r=MIN(r, t...); return r; }
 
 #ifdef ABS
 #undef ABS
@@ -311,14 +334,14 @@ template<typename N> N ABS(N n) { return ((n<0)?-n:n); }
 
 //--------------------------------------------------------------------------------------------------
 //double - floating-point funcs:
-const double D_EPS=1.0e-11L;//15 //epsilon=1.0e-8L; //-11L; //-15L; ///epsilon-nearness
-auto dbl_is_zero	= [](double d)->bool{ return (d<0.0)?(d>=-D_EPS):(d<=D_EPS); };
-auto dbl_is_equal	= [](double l, double r)->bool{ return dbl_is_zero(l-r); };
-auto dbl_ceil		= [](double d)->int{ double D=ABS(d); int I=int(D); if (((D-double(I))>0)&&(d>0)) I++; if (d<0) I*=(-1); return I; };
-auto dbl_floor		= [](double d)->int{ double D=ABS(d); int I=int(D); if (((D-double(I))>0)&&(d<0)) I++; if (d<0) I*=(-1); return I; };
-auto round_nearest	= [](double d)->double{ return double((dbl_is_zero(d))?0.0:(d>0.0)?int(d+0.5):int(d-0.5)); };
-auto round_lesser	= [](double d)->double{ return double((dbl_is_zero(d))?0.0:(d>0.0)?int(d):int(d-0.5)); };
-auto round_greater	= [](double d)->double{ return double((dbl_is_zero(d))?0.0:(d>0.0)?(((d-int(d))>0)?(int(d)+1):int(d)):int(d)); };
+const double D_EPS=1.0e-11L; //epsilon=1.0e-8L; //-11L; //-15L; ///epsilon-nearness
+inline bool dbl_is_zero(double d)			 { return (d<0.0)?(d>=-D_EPS):(d<=D_EPS); }
+inline bool dbl_is_equal(double l, double r) { return dbl_is_zero(l-r); }
+inline int	dbl_ceil(double d)				 { double D=ABS(d); int I=int(D); if (((D-double(I))>0)&&(d>0)) I++; if (d<0) I*=(-1); return I; }
+inline int	dbl_floor(double d)				 { double D=ABS(d); int I=int(D); if (((D-double(I))>0)&&(d<0)) I++; if (d<0) I*=(-1); return I; }
+inline double round_nearest(double d)		 { return double((dbl_is_zero(d))?0.0:(d>0.0)?int(d+0.5):int(d-0.5)); }
+inline double round_lesser(double d)		 { return double((dbl_is_zero(d))?0.0:(d>0.0)?int(d):int(d-0.5)); }
+inline double round_greater(double d)		 { return double((dbl_is_zero(d))?0.0:(d>0.0)?(((d-int(d))>0)?(int(d)+1):int(d)):int(d)); }
 
 //--------------------------------------------------------------------------------------------------
 const double PI=3.1415926535897; //180
@@ -328,21 +351,24 @@ const double PId4=(PI/4.0); //45
 const double PIx2d3=(PI*2.0/3.0); //120
 const double PIx3d2=(PI*3.0/2.0); //=(PI+Pd2);  //270
 
-inline double degtorad(double deg) { return (deg*PI/180); }
-inline double radtodeg(double rad) { return (rad*180/PI); }
+inline double degtorad(double deg)	{ return (deg*PI/180); }
+inline double radtodeg(double rad)	{ return (rad*180/PI); }
 
 //--------------------------------------------------------------------------------------------------
 std::string to_sKMGT(size_t n); //1024, Kilo/Mega/Giga/Tera/Peta/Exa/Zetta/Yotta
 
 //--------------------------------------------------------------------------------------------------
-__attribute__((always_inline)) inline void kips(int sec) { std::this_thread::sleep_for(std::chrono::seconds(sec)); } //1.0
-__attribute__((always_inline)) inline void kipm(int milsec) { std::this_thread::sleep_for(std::chrono::milliseconds(milsec)); } //0.001 (x/1 000)
-__attribute__((always_inline)) inline void kipu(int microsec) { std::this_thread::sleep_for(std::chrono::microseconds(microsec)); } //0.000 001 (x/1 000 000)
-__attribute__((always_inline)) inline void kipn(int nanosec) { std::this_thread::sleep_for(std::chrono::nanoseconds(nanosec)); } //0.000 000 001 (x/1 000 000 000)
+__attribute__((always_inline)) inline void kips(int sec)		{ std::this_thread::sleep_for(std::chrono::seconds(sec)); } //1.0
+__attribute__((always_inline)) inline void kipm(int milsec)		{ std::this_thread::sleep_for(std::chrono::milliseconds(milsec)); } //0.001 (x/1 000)
+__attribute__((always_inline)) inline void kipu(int microsec)	{ std::this_thread::sleep_for(std::chrono::microseconds(microsec)); } //0.000 001 (x/1 000 000)
+__attribute__((always_inline)) inline void kipn(int nanosec)	{ std::this_thread::sleep_for(std::chrono::nanoseconds(nanosec)); } //0.000 000 001 (x/1 000 000 000)
 
 __attribute__((always_inline)) inline auto getclock() { return std::chrono::steady_clock::now(); }
 //inline auto getelapsed(auto b, auto e) { return std::chrono::duration_cast<std::chrono::nanoseconds>(e-b).count(); }
-template<typename B, typename E> __attribute__((always_inline)) inline auto getelapsed(B b, E e) { return std::chrono::duration_cast<std::chrono::nanoseconds>(e-b).count(); }
+template<typename B, typename E> __attribute__((always_inline)) inline auto getelapsed(B b, E e)
+	{
+		return std::chrono::duration_cast<std::chrono::nanoseconds>(e-b).count();
+	}
 //USAGE: auto b=getclock(); some_func_to_be_timed(...); auto duration=getelapsed(b, getclock()); ..
 
 //--------------------------------------------------------------------------------------------------
@@ -384,6 +410,7 @@ uint64_t get_unique_index();
 std::string get_unique_name(const std::string sprefix="U", const std::string ssuffix="");
 inline bool isvalidname(const std::string &sN) { return (sN.find('/')==std::string::npos); } //applies to bash
 inline bool is_name_char(int c)	{ return (((c>='0')&&(c<='9')) || ((c>='A')&&(c<='Z')) || ((c>='a')&&(c<='z')) || (c=='_')); }
+inline bool IsValidName(const std::string &sN) { for (auto c:sN) if (!is_name_char(c)) return false; return true; } //alfa-num__ only
 
 //--------------------------------------------------------------------------------------------------
 // bash/linux...
@@ -914,6 +941,7 @@ template<typename T> struct Stack : private std::vector<T> //LIFO=>push & pop; F
 
 	//index-based access...
 	bool find(const T &t, size_t &idx) { if (size()>0) { idx=0; while (idx<size()) { if (VT::at(idx)==t) return true; idx++; }} return false; }
+	bool has(const T &t) { size_t i; return(find(t, i)); }
 	void push(size_t pos, const T &t) { push(begin()+pos, t); }
 	bool pop(size_t pos, T &t) { if (pos<size()) { t=VT::at(pos); erase(begin()+pos); return true; } return false; }
 	bool peek(size_t pos, T &t) { if (pos<size()) { t=VT::at(pos); return true; } return false; }
@@ -1416,7 +1444,7 @@ public:
 				}
 				else it++;
 			}
-		} //else ? throw or ignore ?
+		} //else just ignore
 	}
 
 	void clear() { destroy(); }
@@ -1440,13 +1468,20 @@ public:
 
 
 //===================================================================================================
-//template<std::equality_comparable T> struct TList /* when c++20 & concepts.h is available */
-template<typename T> struct TList
+//template<std::equality_comparable T> struct TList - when c++20 & concepts.h is available
+//be careful with pointers
+/*
+
+	REPLACE WHEREVER WITH VType<T, etc>
+
+
+template<typename T, bool bDel=false> struct TList
 {
 private:
-	using VecType=std::vector<T>;
+	using VecType=VType<T>; // std::vector<T>;
 	VecType VT{};
-	bool bDelete{false};
+	bool bIsPtr{std::is_pointer<T>::value};
+	bool bDelete{bDel}; //if T is pointer-type - careful!
 	
 public:
 	using iterator=typename VecType::iterator;
@@ -1467,16 +1502,22 @@ public:
 	bool empty() const { return VT.empty(); }
 	size_t size() const { return VT.size(); }
 	virtual ~TList() { clear(); }
-	TList(bool bdel=false) { clear(); bDelete=bdel; }
+	TList() { clear(); }
 	TList(const TList &L) { *this=L; }
-	TList operator=(const TList &L) { clear(); bDelete=L.bDelete; for (auto t:L) Add(t); return *this; }
-	void set_delete(bool bdel=true) { bDelete=bdel; }
+	TList operator=(const TList &L)
+		{
+			//if (L.bDelete) throw std::logic_error("TList: copying deletable pointers");
+			clear();
+			for (auto t:L) Add(t);
+			return *this;
+		}
+	//void set_delete(bool bdel=true) { bDelete=bdel; }
 	bool has(const T &t) const
 	{
 		for (auto tt:VT)
 		{
-			if (bDelete) { if (*tt==*t) return true; }
-			else if (t==tt) return true;
+			if (bIsPtr) return (*tt==*t); //check values pointed to
+			return (t==tt);
 		}
 		return false;
 	}
@@ -1484,12 +1525,13 @@ public:
 	void Remove(T t) { auto it=VT.begin(); while (it!=VT.end()) { if ((*it)==t) { if (bDelete) delete (*it); VT.erase(it); return; } else it++; }}
 	
 };
-
+*/
 
 //===================================================================================================
-struct Storage //container for mixed types
+//struct Storage //container for mixed types
+struct Archive //container for mixed types
 {
-	using MIS=std::map<size_t, std::any>;
+	typedef std::map<size_t, std::any> MIS;
 	using iterator=MIS::iterator;
 	using const_iterator=MIS::const_iterator;
 	using reverse_iterator=MIS::reverse_iterator;
@@ -1501,10 +1543,11 @@ struct Storage //container for mixed types
 	bool	has(size_t si)	{ return !(mis.find(si)==mis.end()); }
 	void	del(size_t si)	{ if (has(si)) mis.erase(si); }
 	
-	virtual ~Storage()						{ clear(); }
-	Storage()								{ clear(); }
-	Storage(const Storage &S)				{ *this=S; }
-	Storage& operator=(const Storage &S)	{ clear(); for (auto p:S.mis) mis[p.first]=p.second; return *this; }
+	virtual ~Archive()						{ clear(); }
+	Archive()								{ clear(); }
+	Archive(const Archive &S)				{ *this=S; }
+	
+	Archive& operator=(const Archive &S)	{ clear(); for (auto p:S.mis) mis[p.first]=p.second; return *this; }
 	
 	template<typename T> bool	istype(size_t si)	{ try { std::any_cast<T>(mis[si]); return true; } catch(...) { return false; }};
 	template<typename T> size_t	hastype()			{ for (auto p:mis) if (istype<T>(p.first)) return p.first; return 0; }
@@ -1512,20 +1555,20 @@ struct Storage //container for mixed types
 	template<typename T> int	store(T t)			{ size_t si=1; while (has(si)) si++; mis[si]=t; return si; }
 	
 	template<typename T> bool	fetch(size_t si, T &t)
-	{
-		if (has(si)) { t=std::any_cast<T>(mis[si]); del(si); return true; }
-		return false;
-	}
+		{
+			if (has(si)) { t=std::any_cast<T>(mis[si]); del(si); return true; }
+			return false;
+		}
 	
 	template<typename T> auto& use(size_t si)
-	{
-		if (has(si))
 		{
-			try { return std::any_cast<T&>(mis.at(si)); }
-			catch(...) { throw std::logic_error("invalid stored type"); }
+			if (has(si))
+			{
+				try { return std::any_cast<T&>(mis.at(si)); }
+				catch(...) { throw std::logic_error("invalid stored type"); }
+			}
+			else throw std::out_of_range("invalid archive index");
 		}
-		else throw std::out_of_range("invalid storage index");
-	}
 	
 	iterator begin()							{ return mis.begin(); }
 	iterator end()								{ return mis.end(); }
