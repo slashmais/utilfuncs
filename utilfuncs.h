@@ -51,6 +51,10 @@ template<typename L, typename R> int sicmp(const L &l, const R &r);
 template<typename L, typename R=L> bool seqs(const L &l, const R &r);
 template<typename L, typename R=L> bool sieqs(const L &l, const R &r);
 
+std::string path_append(const std::string &sPath, const std::string &sApp); ///forward decl
+bool path_realize(const std::string &sfullpath);
+bool canwrite(const std::string sN);
+
 //--------------------------------------------------------------------------------------------------Generic Vector
 enum { SORT_NONE, SORT_ASC, SORT_DESC, };
 
@@ -220,6 +224,7 @@ std::string hostname();
 //for creating output files for e.g.: config/db/logs/whatever
 //order: 1 app-path/, 2 (linux)~/.config/<appname>/, 3 (linux)~/<appname>/ | (win) <homedir>/<app_name_ext>/, 4 <homedir>
 bool default_output_path(std::string &outpath); //outpath will exist/(be created) as writable directory
+std::string get_default_output_log(); // "/default_output_path/LOGGER.LOG"
 
 //--------------------------------------------------------------------------------------------------
 //linux - processes (using /proc, etc)
@@ -236,49 +241,49 @@ bool kill_app(const std::string &spath);
 #endif
 
 //--------------------------------------------------------------------------------------------------
-void write_to_log(const std::string &slogname, const std::string &sinfo); //create/append to ~/LOGFILES/slogname
-std::string path_append(const std::string &sPath, const std::string &sApp); ///forward decl
-template<typename...T> void logger(T...t)
-	{
-		std::string sp{};
-		default_output_path(sp);
-		sp=path_append(sp, "/LOGGER.LOG");
-		std::ofstream ofs(sp.c_str(), std::ios::app);
-		(ofs<<...<<t)<<"\n";
-		ofs.close();
-	}
-	
-template<typename...T> void logger_file(const std::string &slogfile, T...t)
-	{
-		std::ofstream ofs(slogfile.c_str(), std::ios::app);
-		(ofs<<...<<t)<<"\n";
-		ofs.close();
-	}
-
-//--------------------------------------------------------------------------------------------------
 constexpr int dssprec = (std::numeric_limits<double>::max_digits10 - 1); //the -1 stops filling to the right
 template<typename...P> inline void P2SS(std::string &r, P...p) { std::stringstream ss(""); ss.precision(dssprec); (ss<<...<<p); r=ss.str(); } //?inline speed-up?
 template<typename...P> void say(P...p)					 { std::string r{}; P2SS(r, p...); WRITESTRING(r); }
 template<typename...P> std::string says(P...p)			 { std::string r{}; P2SS(r, p...); return r; }
 template<typename...P> void sayss(std::string &s, P...p) { std::string r{}; P2SS(r, p...); s+=r; } //APPENDS! to s!
-template<typename...P> bool sayerr(P...p)				 { std::string r{}; P2SS(r, p...); WRITESTRING(r); return false; }
-template<typename...P> bool sayfail(P...p)				 { std::string r{}; P2SS(r, p...); WRITESTRING(r); return false; }
-template<typename...P> void saylog(P...p)				 { logger(p...); } //consistency
+template<typename...P> bool sayerr(P...p)				 { std::string r{}; P2SS(r, "Error: ", p...); WRITESTRING(r); return false; }
+template<typename...P> bool sayfail(P...p)				 { std::string r{}; P2SS(r, "Fail: ",  p...); WRITESTRING(r); return false; }
+template<typename...T> void logger(T...t); //forward decl
+template<typename...P> void saylog(P...p)				 { logger(p...); } //consistency (use get_default_output_log() to find where it is)
+template<typename...P> void sayscsv(std::string &s, P...p)
+	{
+		//unpacks parameter pack into csv-string, (mostly useful for debugging)
+		//(reversing (re-packing) may be hard (loses original types), better to use tuple or c++20 sequence(?))
+		std::stringstream ss(""); ss.precision(dssprec);
+		auto scsv = [&](auto pp){ ss << ((ss.str().size())?",":"") << pp; };
+		(int[]){ 0, (scsv(p), void(), 0)... }; //construct throw-away int-array filled with 0's & in the process fills ss
+		s=ss.str();
+	}
 
 //--------------------------------------------------------------------------------------------------
-//unpacks variadic into csv-string (only if all in pack can stream)
-//(mostly useful for debugging purposes)
-template<typename H, typename...T> std::string unpack2csv(H h, T...t)
+//void write_to_log(const std::string &slogname, const std::string &sinfo); //create/append
+template<typename...T> void logger(T...t)
 	{
-		std::stringstream ss("");
-		ss << h;
-		(int[]){ 0, (ss<<", "<<t, void(), 0)... }; //construct throw-away int-array filled with 0's
-		return ss.str();
+		std::string sp{}, sd{};
+		sp=get_default_output_log();
+		std::ofstream ofs(sp.c_str(), std::ios::app);
+		(ofs<<...<<t)<<"\n";
+		ofs.close();
 	}
-//(reversing above will require the originating types of the values, 
-// better to use tuple or c++20 std::sequence(?))
+	
+template<typename...T> void write_to_log(const std::string &slogfile, T...t)
+	{
+		if ((slogfile[0]!='/')||!path_realize(slogfile)||!canwrite(slogfile))
+		{
+			sayfail("write_to_log: cannot use '", slogfile, "'\n"); //need full path & name
+			return;
+		}
+		std::ofstream ofs(slogfile.c_str(), std::ios::app);
+		(ofs<<...<<t)<<"\n";
+		ofs.close();
+	}
 
-//>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>FOR DEBUGGING & DEV-AID
+//>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>FOR DEBUGGING etc
 inline int trace_sequence()	{ static int ts{0}; ++ts; return ts; }
 //WhereAmI - WAI
 #define WAI says("*", trace_sequence(), "* TRACE: [", __FILE__, " : ", long(__LINE__), " : ", __func__, "] ")

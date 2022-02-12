@@ -59,13 +59,13 @@ bool log_report_error(const std::string &serr, bool btell)
 	std::ofstream(slog.c_str(), std::ios::app) << serr << "\n";
 	return report_error(serr, btell);
 }
-void write_to_log(const std::string &slogname, const std::string &sinfo)
-{
-	std::string slog=path_append(homedir(), "LOGFILES");
-	if (!path_realize(slog)) { sayerr("cannot create/access log-file-dir: ", slog); return; }
-	slog=path_append(slog, slogname);
-	std::ofstream(slog.c_str(), std::ios::app) << sinfo << "\n";
-}
+//void write_to_log(const std::string &slogname, const std::string &sinfo)
+//{
+//	std::string slog=path_append(homedir(), "LOGFILES");
+//	if (!path_realize(slog)) { sayerr("cannot create/access log-file-dir: ", slog); return; }
+//	slog=path_append(slog, slogname);
+//	std::ofstream(slog.c_str(), std::ios::app) << sinfo << "\n";
+//}
 
 //--------------------------------------------------------------------------------------------------
 std::string s_utilfuncs_error="";
@@ -266,6 +266,14 @@ bool default_output_path(std::string &outpath)
 #endif
 	if (path_realize(sp)) outpath=sp; else outpath=homedir();
 	return canwrite(outpath);
+}
+
+std::string get_default_output_log() // "/default_output_path/LOGGER.LOG"
+{
+	std::string sflog{};
+	default_output_path(sflog);
+	sflog=path_append(sflog, "/LOGGER.LOG");
+	return sflog;
 }
 
 //--------------------------------------------------------------------------------------------------
