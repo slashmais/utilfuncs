@@ -31,8 +31,7 @@
 #include <thread>
 #include <mutex>
 
-#if defined(PLATFORM_POSIX) || defined(__linux__) || defined(unix) || defined(__unix__) || defined(__unix)
-//#if d e f ined(PLATFORM_POSIX) || defined(__linux__)
+#ifdef IS_LINUX
 #include <pwd.h>
 #include <grp.h>
 #include <sys/types.h>
@@ -89,7 +88,7 @@ bool set_utilfuncs_error(const std::string &serr, bool btell)
 	if X/Wayland is running ...
 	
 */
-#ifdef flagGUI
+#ifdef IS_UPP_THEIDE
 #include <CtrlLib/CtrlLib.h>
 #include <CtrlCore/CtrlCore.h>
 using namespace Upp;
@@ -185,7 +184,7 @@ bool askok(const std::string &smsg)
 	return READOK(smsg);
 }
 
-#if defined(PLATFORM_POSIX) || defined(__linux__) || defined(unix) || defined(__unix__) || defined(__unix)
+#ifdef IS_LINUX
 
 	bool validate_app_path(std::string sFP, std::string &sRet)
 	{ //ignores cmdline parameters..
@@ -226,7 +225,7 @@ bool askok(const std::string &smsg)
 	std::string homedir() { return getpwuid(getuid())->pw_dir; }
 	std::string hostname() { char buf[1024]; gethostname(buf, 1024); return std::string((char*)buf); }
 	
-#elif defined(_WIN64)
+#elif defined(IS_WINDOWS)
 	std::string thisapp()
 	{
 		TCHAR buf[MAX_PATH];
@@ -240,7 +239,7 @@ bool askok(const std::string &smsg)
 	const std::string hostname() { return "(N/A)"; }
 #endif
 
-#if defined(PLATFORM_POSIX) || defined(__linux__) || defined(unix) || defined(__unix__) || defined(__unix)
+#ifdef IS_LINUX
 	int realuid() { return (int)getuid(); }
 	int effectiveuid() { return (int)geteuid(); }
 	bool has_root_access() { return seqs(username(effectiveuid()), "root"); }
@@ -256,10 +255,10 @@ bool default_output_path(std::string &outpath)
 	if (canwrite(sp)) { outpath=sp; return true; }
 	std::string sn{};
 	sn=path_name(sapp);
-#if defined(PLATFORM_POSIX) || defined(__linux__) || defined(unix) || defined(__unix__) || defined(__unix)
+#ifdef IS_LINUX
 		sp=path_append(homedir(), ".config");
 		sp=path_append(sp, sn);
-#elif defined(_WIN64)
+#elif defined(IS_WINDOWS)
 	//sn=file_name_noext(path_name(sapp))
 	sn=SanitizeName(path_name(sapp));
 	sp=path_append(homedir(), sn);
@@ -337,7 +336,7 @@ bool kill_app(const std::string &spath)
 }
 
 
-#if defined(PLATFORM_POSIX) || defined(__linux__) || defined(unix) || defined(__unix__) || defined(__unix)
+#ifdef IS_LINUX
 #include <termios.h>
 #include <fcntl.h>
 	bool checkkeypress(int k)
@@ -383,7 +382,7 @@ bool kill_app(const std::string &spath)
 		return (!pw.empty());
 	}
 	
-#elif defined(_WIN64)
+#elif defined(IS_WINDOWS)
 	bool checkkeypress(int k)																	//todo...
 	{																							//untested
 		HANDLE h=GetStdHandle(STD_INPUT_HANDLE);
@@ -1191,6 +1190,19 @@ size_t splitslist(const std::string &list, const std::string &delim, VSTR &vs, b
 	return vs.size();
 }
 
+size_t splitsclist(const std::string &list, const std::string &delims, VSTR &vs, bool bIncEmpty) //on each char in delims
+{
+	std::string s{};
+	//NB: do not clear vs (may contain preset-values) - caller's task; - just add to it
+	for (auto c:list)
+	{
+		if (delims.find(c)!=std::string::npos) { if (!s.empty()||bIncEmpty) vs.push_back(s); s.clear(); }
+		else s+=c;
+	}
+	if (!s.empty()||bIncEmpty) vs.push_back(s);
+	return vs.size();
+}
+
 //size_t splitqslist(const std::string &list, char delim, VSTR &vs, bool bIncEmpty)
 //{
 //	//std::stringstream ss(list);
@@ -1351,7 +1363,7 @@ bool GetSystemEnvironment(SystemEnvironment &SE)
 {
 	SE.clear();
 	
-#if defined(PLATFORM_POSIX) || defined(__linux__) || defined(unix) || defined(__unix__) || defined(__unix)
+#ifdef IS_LINUX
 //#include <paths.h>
 	char *pc;
 	std::string s;
@@ -1373,11 +1385,11 @@ bool GetSystemEnvironment(SystemEnvironment &SE)
 size_t MaxPathLength()
 {
 	//(it's a mess!)
-#if defined(PLATFORM_POSIX) || defined(__linux__) || defined(unix) || defined(__unix__) || defined(__unix)
+#ifdef IS_LINUX
 	long n = pathconf(".", _PC_PATH_MAX);
 	if (n<0) n=4097; //n==-1 effectively means unlimited size
 	return size_t(n);
-#elif defined(_WIN64)
+#elif defined(IS_WINDOWS)
 	return size_t(255); //actually 260
 	//if long names are used, prefix path with "\\?\" for 32767 byte length
 #endif
@@ -1385,7 +1397,7 @@ size_t MaxPathLength()
 
 //--------------------------------------------------------------------------------------------------
 
-#if defined(PLATFORM_POSIX) || defined(__linux__) || defined(unix) || defined(__unix__) || defined(__unix)
+#ifdef IS_LINUX
 struct dirent *ReadDir(DIR *pd) //wrapper to discard '.' and '..' entries
 {
 	auto isdots=[](std::string s)->bool{ return ((s==".")||(s=="..")); };
@@ -1461,7 +1473,7 @@ std::string FSTName(FST fst, bool bshort)
 };
 
 //-------------------------------------------------------MIME
-#if defined(PLATFORM_POSIX) || defined(__linux__) || defined(unix) || defined(__unix__) || defined(__unix)
+#ifdef IS_LINUX
 #include <magic.h>
 struct MimeInfo : NOCOPY
 {
@@ -1494,7 +1506,7 @@ struct MimeInfo : NOCOPY
 			return sx;
 		}
 };
-#elif defined(_WIN64)
+#elif defined(IS_WINDOWS)
 struct MimeInfo : NOCOPY ///TODO ---
 {
 	~MimeInfo() {}
@@ -1640,9 +1652,9 @@ std::string path_append(const std::string &sPath, const std::string &sApp)
 	std::string sl=sPath, sr=sApp;
 	std::string sep{};
 	static std::string spa{};
-#if defined(PLATFORM_POSIX) || defined(__linux__) || defined(unix) || defined(__unix__) || defined(__unix)
+#ifdef IS_LINUX
 	sep="/";
-#elif defined(_WIN64)
+#elif defined(IS_WINDOWS)
 	sep="\\";
 #endif
 	RTRIM(sl, sep.c_str());
@@ -1655,7 +1667,7 @@ bool path_realize(const std::string &spath)
 {
 	if (dir_exist(spath)) return true;
 	clear_fs_err();
-#if defined(PLATFORM_POSIX) || defined(__linux__) || defined(unix) || defined(__unix__) || defined(__unix)
+#ifdef IS_LINUX
 	VSTR vp{};
 	VSTR vpp{};
 	if (splitslist(spath, '/', vp, false)>0)
@@ -1667,7 +1679,7 @@ bool path_realize(const std::string &spath)
 		if (!b) { for (auto s:vpp) dir_delete(s); return fs_err(says("path_realize: '", spath, "' - ", filesys_error())); }
 	}
 	else return fs_err(says("path_realize: '", spath, "' - invalid path"));
-#elif defined(_WIN64)
+#elif defined(IS_WINDOWS)
 	///todo: test &/ chg to use windows funcs...
 	std::error_code ec;
 	if (FSYS::create_directories(spath, ec)) return true;
@@ -1681,7 +1693,7 @@ std::string path_path(const std::string &spath) //returns all to Left of last di
 	std::string r(spath);
 	char sep{'/'};
 	size_t p{0};
-#if defined(_WIN64)
+#ifdef IS_WINDOWS
 	sep='\\';
 #endif
 	if ((r.size()>1)&&(r[r.size()-1]==sep)) { RTRIM(r, std::string{sep}.c_str()); return r; }
@@ -1695,7 +1707,7 @@ std::string path_name(const std::string &spath)
 	std::string r(spath);
 	char sep{'/'};
 	size_t p{0};
-#if defined(_WIN64)
+#ifdef IS_WINDOWS
 	sep='\\';
 #endif
 	if (r.size()>1) RTRIM(r, std::string{sep}.c_str());
@@ -1723,14 +1735,14 @@ std::string path_time_h(const std::string &spath) ///todo remove this func
 bool path_max_free(const std::string spath, size_t &max, size_t &free)
 {
 	max=free=0;
-#if defined(PLATFORM_POSIX) || defined(__linux__) || defined(unix) || defined(__unix__) || defined(__unix)
+#ifdef IS_LINUX
 
 	struct statvfs stv;
 	if (statvfs(spath.c_str(), &stv)!=0) return fs_err(says("path_max_free: ", std::strerror(errno)));
 	max=stv.f_blocks*stv.f_frsize;
 	free=stv.f_bavail*stv.f_frsize;
 	return true;
-#elif defined(_WIN64)
+#elif defined(IS_WINDOWS)
 	max=free=0;
 	std::error_code ec;
 	if (FSYS::exists(spath, ec))
@@ -1748,10 +1760,10 @@ std::string getcurpath()
 {
 	size_t MPS=MaxPathLength();
 	std::string s{};
-#if defined(PLATFORM_POSIX) || defined(__linux__) || defined(unix) || defined(__unix__) || defined(__unix)
+#ifdef IS_LINUX
 	char buf[MPS];
 	if (getcwd(buf, MPS)!=nullptr) s=buf;
-#elif defined(_WIN64)
+#elif defined(IS_WINDOWS)
 	s=(std::string)FSYS::current_path();
 #endif
 	return s;
@@ -1777,7 +1789,7 @@ bool fsdelete(const std::string fd)
 	clear_fs_err();
 	if (!canwrite(fd)) return fs_err(says("fsdelete: '", fd, "' - insufficient rights"));
 	if (!fsexist(fd)) return true;
-#if defined(PLATFORM_POSIX) || defined(__linux__) || defined(unix) || defined(__unix__) || defined(__unix)
+#ifdef IS_LINUX
 	if (isdir(fd))
 	{
 		DIR *pD;
@@ -1792,7 +1804,7 @@ bool fsdelete(const std::string fd)
 		if (b) rmdir(fd.c_str());
 	}
 	else if (unlink(fd.c_str())!=0) return fs_err(says("fsdelete: ", std::strerror(errno)));
-#elif defined(_WIN64)
+#elif defined(IS_WINDOWS)
 	std::error_code ec;
 	FSYS::remove_all(fd, ec);
 	if (ec) return fs_err(says("fsdelete: '", fd, "' - ", ec.message()));
@@ -1807,9 +1819,9 @@ bool fsrename(const std::string &x, const std::string &n) //x=existing full path
 	if (!isvalidname(n)) return fs_err(says("fsrename: invalid new name '", n, "'"));
 	std::string t=path_append(path_path(x), n);
 	if (fsexist(t)) return fs_err(says("fsrename: '", t, "' already exist"));
-#if defined(PLATFORM_POSIX) || defined(__linux__) || defined(unix) || defined(__unix__) || defined(__unix)
+#ifdef IS_LINUX
 	if (rename(x.c_str(), t.c_str())!=0) return fs_err(says("fsrename: ", std::strerror(errno)));
-#elif defined(_WIN64)
+#elif defined(IS_WINDOWS)
 	std::error_code e;
 	FSYS::rename(sfile, snd, e);
 	if (e) return fs_err(says("fsrename: '", x, "' to '", t, "' - ", e.message()));
@@ -1826,7 +1838,7 @@ bool fscopy(const std::string &src, const std::string &dest, bool bBackup, bool 
 	//TO_DO_MSG("copying links(soft/hard), pipes, sockets, devices ... use 'Clone' ")
 //	TODO("copying links(soft/hard), pipes, sockets, devices ... use 'Clone' ");
 	
-#if defined(PLATFORM_POSIX) || defined(__linux__) || defined(unix) || defined(__unix__) || defined(__unix)
+#ifdef IS_LINUX
 	
 	if (isdir(src))
 	{
@@ -1894,7 +1906,7 @@ bool fscopy(const std::string &src, const std::string &dest, bool bBackup, bool 
 		bret=(bIgnoreSpecial|fs_err(says("fscopy: '", src, "' is a ", GetFSType(src), " - use {Tarball|Synchronize|Archive} to copy")));
 	}
 	
-#elif defined(_WIN64)
+#elif defined(IS_WINDOWS)
 
 	std::error_code ec;
 	FSYS::copy(src, Dest, FSYS::copy_options::recursive|FSYS::copy_options::copy_symlinks, ec);
@@ -1958,7 +1970,7 @@ std::string getrelativepathname(const std::string &sroot, const std::string &spa
 	return srel;
 }
 
-#if defined(PLATFORM_POSIX) || defined(__linux__) || defined(unix) || defined(__unix__) || defined(__unix)
+#ifdef IS_LINUX
 std::string getlinktarget(const std::string &se) //was getsymlinktarget
 {
 	size_t MPS=MaxPathLength();
@@ -1999,7 +2011,7 @@ bool isnontextfile(const std::string sF)
 
 bool istextfile(std::string sf)
 {
-#if defined(PLATFORM_POSIX) || defined(__linux__) || defined(unix) || defined(__unix__) || defined(__unix)
+#ifdef IS_LINUX
 	return istxtfile(sf);
 #else
 	return is_text_file(sf);
@@ -2089,7 +2101,7 @@ bool iswebfile(std::string sf) //htm[l]/css/
 	return (std::string(" htm html css js ").find(sx)!=std::string::npos);
 }
 
-#if defined(PLATFORM_POSIX) || defined(__linux__) || defined(unix) || defined(__unix__) || defined(__unix)
+#ifdef IS_LINUX
 #include <magic.h>
 	bool check_magic_mimetype(std::string sf, std::string mt)
 	{
@@ -2133,7 +2145,7 @@ bool iswebfile(std::string sf) //htm[l]/css/
 	bool isrtffile(std::string sf) { return check_magic_mimetype(sf, "text/rtf"); }
 	bool ispdffile(std::string sf) { return check_magic_mimetype(sf, "application/pdf"); }
 	
-#elif defined(_WIN64)
+#elif defined(IS_WINDOWS)
 	bool match_extension(std::string sf, std::string sxs)
 	{
 		std::string sx=file_extension(sf);
@@ -2167,7 +2179,7 @@ DTStamp get_dtmodified(const std::string sf)
 	return ToDTStamp(path_time(sf));
 }
 
-#if defined(PLATFORM_POSIX) || defined(__linux__) || defined(unix) || defined(__unix__) || defined(__unix)
+#ifdef IS_LINUX
 
 	std::string get_owner(const std::string sf)
 	{
@@ -2189,7 +2201,7 @@ DTStamp get_dtmodified(const std::string sf)
 		return false;
 	}
 
-#elif defined(_WIN64)
+#elif defined(IS_WINDOWS)
 
 #include <stdio.h>
 #include <windows.h>
@@ -2276,7 +2288,7 @@ bool setpermissions(const std::string, int, bool)//(const std::string sN, int pr
 */
 }
 
-#if defined(PLATFORM_POSIX) || defined(__linux__) || defined(unix) || defined(__unix__) || defined(__unix)
+#ifdef IS_LINUX
 
 	std::string getfullrights(const std::string sf) //ogo
 	{
@@ -2322,7 +2334,7 @@ bool setpermissions(const std::string, int, bool)//(const std::string sN, int pr
 		return true;
 	}
 
-#elif defined(_WIN64)
+#elif defined(IS_WINDOWS)
 
 	std::string getfullrights(const std::string sfd) //ogo
 	{
@@ -2396,7 +2408,7 @@ bool dir_create(const std::string &sdir)
 {
 	clear_fs_err();
 	if (dir_exist(sdir)) return true;
-#if defined(PLATFORM_POSIX) || defined(__linux__) || defined(unix) || defined(__unix__) || defined(__unix)
+#ifdef IS_LINUX
 /*
 	User:	S_IRUSR (read), S_IWUSR (write), S_IXUSR (execute), S_IRWXU (read+write+execute)
 	Group:	S_IRGRP (read), S_IWGRP (write), S_IXGRP (execute), S_IRWXG (read+write+execute)
@@ -2404,7 +2416,7 @@ bool dir_create(const std::string &sdir)
 */
 	int rwxr_xr_x=(S_IRWXU|S_IRGRP|S_IXGRP|S_IROTH|S_IXOTH);
 	if (mkdir(sdir.c_str(), rwxr_xr_x)!=0) return fs_err(says("dir_create: '", sdir, "' - ", strerror(errno)));
-#elif defined(_WIN64)
+#elif defined(IS_WINDOWS)
 	std::error_code ec;
 	if (!FSYS::create_directory(sdir, ec)) return fs_err(says("dir_create: '", sdir, "' - ", ec.message()));
 #endif
@@ -2456,7 +2468,7 @@ bool dir_read(const std::string &sdir, DirEntries &content, bool bFullpath) //on
 {
 	content.clear();
 	bool bret{true};
-#if defined(PLATFORM_POSIX) || defined(__linux__) || defined(unix) || defined(__unix__) || defined(__unix)
+#ifdef IS_LINUX
 	///this is ~3 x faster than std::filesystem
 	DIR *pD;
 	struct dirent *pDE;
@@ -2472,7 +2484,7 @@ bool dir_read(const std::string &sdir, DirEntries &content, bool bFullpath) //on
 		closedir(pD);
 	}
 	else bret=false;
-#elif defined(_WIN64)
+#elif defined(IS_WINDOWS)
 	clear_fs_err();
 	if (!dir_exist(sdir)) bret=fs_err(says("dir_read: directory '", sdir, "' does not exist"));
 	try
@@ -2556,7 +2568,7 @@ size_t dir_size(const std::string sdir, bool)// bDeep) pedantic
 	size_t used=0;
 	if (!dir_exist(sdir)) { fs_err(says("dir_size: invalid directory '", sdir, "'")); return 0; }
 
-#if defined(PLATFORM_POSIX) || defined(__linux__) || defined(unix) || defined(__unix__) || defined(__unix)
+#ifdef IS_LINUX
 	//DirEntries de;
 	struct stat st;
 	used=(!stat(sdir.c_str(), &st))?st.st_size:0;
@@ -2736,9 +2748,9 @@ bool file_rename(const std::string &sfile, const std::string &sname)
 	if (!isvalidname(sname)) return fs_err(says("file_rename: invalid new name '", sname, "'"));
 	std::string snd=path_append(path_path(sfile), sname);
 	if (file_exist(snd)) return fs_err(says("file_rename: name '", sname, "' already exist"));
-#if defined(PLATFORM_POSIX) || defined(__linux__) || defined(unix) || defined(__unix__) || defined(__unix)
+#ifdef IS_LINUX
 	if (rename(sfile.c_str(), snd.c_str())!=0) return fs_err(says("file_rename: ", std::strerror(errno)));
-#elif defined(_WIN64)
+#elif defined(IS_WINDOWS)
 	std::error_code ec;
 	FSYS::rename(sfile, snd, ec);
 	if (ec) return fs_err(says("file_rename: '", sfile, "' to '", snd, "' - ", ec.message()));

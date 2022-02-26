@@ -18,6 +18,19 @@
     If not, see <http://www.gnu.org/licenses/>.
 */
 
+#if defined(PLATFORM_POSIX) || defined(__linux__) || defined(unix) || defined(__unix__) || defined(__unix)
+#define IS_LINUX 1
+#endif
+
+#if defined(_WIN64)
+#define IS_WINDOWS 1
+#endif
+
+#if defined(flagGUI)
+#define IS_UPP_THEIDE 1
+#endif
+
+
 #ifndef _utilfuncs_h_
 #define _utilfuncs_h_
 
@@ -36,6 +49,8 @@
 #include <cstdlib> //for system()-calls
 #include <random>
 #include <cmath>
+#include <list>
+
 
 //#include <concepts> //in c++20
 
@@ -55,11 +70,38 @@ std::string path_append(const std::string &sPath, const std::string &sApp); ///f
 bool path_realize(const std::string &sfullpath);
 bool canwrite(const std::string sN);
 
+//--------------------------------------------------------------------------------------------------
+#ifdef MAX
+#undef MAX
+#endif
+#ifdef MIN
+#undef MIN
+#endif
+template<typename T=int> const T MAX()	{ return std::numeric_limits<T>::max(); }
+template<typename T> T MAX(T t)			{ return t; }
+template<typename T> T MAX(T h, T t)	{ return (h>t)?h:t; }
+template<typename R, typename...T> R MAX(R h, R v, T...t)	{ R r=(h>v)?h:v; r=MAX(r, t...); return r; }
+template<typename R, typename V, typename...T> auto MAX(R h, V v, T...t)	{ auto r=(h>v)?h:v; r=MAX(r, t...); return r; }
+template<typename T=int> T MIN()		{ return std::numeric_limits<T>::min(); }
+template<typename T> T MIN(T t)			{ return t; }
+template<typename T> T MIN(T h, T t)	{ return (h<t)?h:t; }
+template<typename R, typename...T> R MIN(R h, R v, T...t)	{ R r=(h<v)?h:v; r=MIN(r, t...); return r; }
+template<typename R, typename V, typename...T> auto MIN(R h, V v, T...t)	{ auto r=(h<v)?h:v; r=MIN(r, t...); return r; }
+
+#ifdef ABS
+#undef ABS
+#endif
+template<typename N> N ABS(N n) { return ((n<0)?-n:n); }
+//#define ABS(n) ((n<0)?-n:n)
+
+//--------------------------------------------------------------------------------------------------
+struct NOCOPY { private: NOCOPY(const NOCOPY&)=delete; NOCOPY& operator=(const NOCOPY&)=delete; public: NOCOPY(){}};
+
 //--------------------------------------------------------------------------------------------------Generic Vector
 enum { SORT_NONE, SORT_ASC, SORT_DESC, };
-
 template<typename T, bool Unique=false, int Sort=SORT_NONE> struct VType : public std::vector<T>
 {
+	//type T must define ==, >, < (be comparable)
 	//generic vec to supply Add(), Set(), Has(), Drop(), use variadics & optional sort, optional unique
 	
 	using VT=std::vector<T>;
@@ -69,6 +111,7 @@ template<typename T, bool Unique=false, int Sort=SORT_NONE> struct VType : publi
 	bool empty() const							{ return VT::empty(); }
 	virtual ~VType()							{ clear(); }
 	VType()										{ clear(); }
+	
 	VType& setsortorder(int order)
 		{
 			if ((order>=0)&&(order<=SORT_DESC)&&(order!=sorder))
@@ -128,7 +171,8 @@ template<typename T, bool Unique=false, int Sort=SORT_NONE> struct VType : publi
 			os << "[";
 			if (v.size()) os << v[0];
 			if (v.size()>1) { for (size_t i=1; i<(v.size()-1); i++) os << ", " << v[i]; }
-			os << ", " << v[(v.size()-1)] << "]";
+			if (v.size()>1) os << ", " << v[(v.size()-1)];
+			os << "]";
 			return os;
 		}
 };
@@ -177,9 +221,54 @@ struct MVSTR : std::map<std::string, VSTR >
 };
 */
 
-//--------------------------------------------------------------------------------------------------
-//inherit to make a class non-copyable
-struct NOCOPY { private: NOCOPY(const NOCOPY&)=delete; NOCOPY& operator=(const NOCOPY&)=delete; public: NOCOPY(){}};
+//---------------------------------------------------------------------------------------------------custom_list
+template<typename T> struct CList : public VType<T>
+{
+	using V=VType<T>;
+	~CList() { V::clear(); }
+	CList() { V::clear(); }
+	CList(const CList &L) { *this=L; }
+
+	auto get_it(size_t i) //returns iterator to i'th element
+		{
+			if (i<V::size())
+			{
+				size_t k{0};
+				auto it=V::begin();
+				while ((k<=i)&&(it!=V::end())) { if (i==k) return it; k++; it++; }
+			}
+			return V::end();
+		}
+	auto get_it(const T &t) //returns iterator to first t or end()
+		{
+			auto it=V::begin();
+			while (it!=V::end()) { if (t==(*it)) break; it++; }
+			return it;
+		}
+
+	size_t findpos(const T &t, size_t p=0) const { size_t i{p}; while (i++<V::size()) if (t==V::at(i)) break; return i; }
+	inline bool has(const T &t)				{ return (get_it(t)!=V::end()); } //convenience
+	size_t add(const T &t)					{ V::push_back(t); return (V::size()-1); }
+	size_t prepend(const T &t)				{ V::push_front(t); return 0; }
+	size_t insert(const T &t, size_t p)		{ auto it=get_it(p); V::insert(it, t); return findpos(t); } //can be at end
+	void remove(size_t p, size_t n=1)		{ auto it=get_it(p); V::erase(it, it+n); }
+	void remove(T &t)						{ V::erase(get_it(t)); }
+
+	CList mid(size_t p, size_t n) const //'n' items inclusive of 'p'
+	{
+		CList<T> R{};
+		size_t i{p}, m;
+		m=MIN((i+n), V::size());
+		while (i<m) R.add(V::at(i++));
+		return R;
+	}
+
+	CList left(size_t n) const				{ return mid(0, n); }
+	CList right(size_t n) const				{ return mid(V::size()-n, V::size()); }
+	CList complement(const CList &L) const	{ CList R(*this); for (auto t:L) R.remove(t); return R; } //returns all not in cl
+	T head(CList &tail) const { T t{}; tail.clear(); if (!V::empty()) { t=V::at(0); tail=*this; tail.remove(0); } return t; }
+
+};
 
 //--------------------------------------------------------------------------------------------------system-error-logging-etc
 std::string get_error_report();
@@ -196,11 +285,6 @@ bool set_utilfuncs_error(const std::string &serr, bool btell=false);
 void WRITESTRING(const std::string &s); //cli or gui
 std::string READSTRING(const std::string &sprompt); //cli or gui
 
-//don't need - use say()
-//#if defined(flagGUI)
-//void MsgOK(std::string msg, std::string title="Message");
-//#endif
-
 //--------------------------------------------------------------------------------------------------
 std::string askuser(const std::string &sprompt);
 bool askok(const std::string &smsg);
@@ -209,7 +293,7 @@ bool checkkeypress(int k);
 bool askpass(std::string &pw); //cli-only
 
 //--------------------------------------------------------------------------------------------------
-#if defined(PLATFORM_POSIX) || defined(__linux__) || defined(unix) || defined(__unix__) || defined(__unix)
+#ifdef IS_LINUX
 bool validate_app_path(std::string sFP, std::string &sRet);
 #endif
 
@@ -234,7 +318,7 @@ void kill_self();
 bool kill_app(const std::string &spath);
 
 //--------------------------------------------------------------------------------------------------
-#if defined(PLATFORM_POSIX) || defined(__linux__) || defined(unix) || defined(__unix__) || defined(__unix)
+#ifdef IS_LINUX
 	int realuid();
 	int effectiveuid();
 	bool has_root_access();
@@ -312,30 +396,6 @@ inline void to_do(std::string s="") { say("(To do) ", s); };
 #define TODO(m) say("To Do: '", __func__, "', in ", __FILE__, " [", long(__LINE__), "] ", #m)
 //<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
-
-//--------------------------------------------------------------------------------------------------
-#ifdef MAX
-#undef MAX
-#endif
-#ifdef MIN
-#undef MIN
-#endif
-template<typename T=int> const T MAX()	{ return std::numeric_limits<T>::max(); }
-template<typename T> T MAX(T t)			{ return t; }
-template<typename T> T MAX(T h, T t)	{ return (h>t)?h:t; }
-template<typename R, typename...T> R MAX(R h, R v, T...t)	{ R r=(h>v)?h:v; r=MAX(r, t...); return r; }
-template<typename R, typename V, typename...T> auto MAX(R h, V v, T...t)	{ auto r=(h>v)?h:v; r=MAX(r, t...); return r; }
-template<typename T=int> T MIN()		{ return std::numeric_limits<T>::min(); }
-template<typename T> T MIN(T t)			{ return t; }
-template<typename T> T MIN(T h, T t)	{ return (h<t)?h:t; }
-template<typename R, typename...T> R MIN(R h, R v, T...t)	{ R r=(h<v)?h:v; r=MIN(r, t...); return r; }
-template<typename R, typename V, typename...T> auto MIN(R h, V v, T...t)	{ auto r=(h<v)?h:v; r=MIN(r, t...); return r; }
-
-#ifdef ABS
-#undef ABS
-#endif
-template<typename N> N ABS(N n) { return ((n<0)?-n:n); }
-//#define ABS(n) ((n<0)?-n:n)
 
 //--------------------------------------------------------------------------------------------------
 //double - floating-point funcs:
@@ -440,7 +500,7 @@ std::string EscapeChars(const std::string &raw, const std::string &sChars); //in
 std::string UnescapeChars(const std::string &sesc); //remove '\' from escaped chars, retain escaped '\' itself
 
 //--------------------------------------------------------------------------------------------------
-std::string ucase(const char *sz); //ascii-only todo: also do unicode upper/lower cases
+std::string ucase(const char *sz); //ascii-only 
 std::string lcase(const char *sz);
 // ***** See also: uucase(), ulcase(), touucase(), toulcase() in uul.h/cpp *****
 inline std::string ucase(const std::string &s) { return ucase(s.c_str()); }
@@ -485,7 +545,6 @@ std::string spadct(const std::string &s, int nmaxlen, char c=' ', bool bfront=tr
 template<typename T> std::string pads(T t, int nmaxlen, char c=' ', bool bfront=true, int tabsize=4) //todo ?tabsize?
 {
 	std::string s{};
-	int nt=0;
 	s=says(t);
 	int n=nmaxlen-s.length();
 	if (n>0) s.insert((bfront?0:s.length()), n, c);
@@ -507,9 +566,6 @@ bool siendlike(const std::string &send, const std::string &sall); //non-case-sen
 bool scontainlike(const std::string &scon, const std::string &sall); //case-sensitive compare/check if scon appears within sall
 bool sicontainlike(const std::string &scon, const std::string &sall); //non-case-sensitive compare/check if scon appears within sall
 */
-
-//--------------------------------------------------------------------------------------------------
-void RTFtostring(const std::string &srtf, std::string &stext); //...cannot remember why I would need this...
 
 //--------------------------------------------------------------------------------------------------UTF8
 //some crude utf8-related funcs...
@@ -554,7 +610,7 @@ std::string decs(const std::string &enc, const std::string &pw="");
 //--------------------------------------------------------------------------------------------------
 size_t splitslist(const std::string &list, char delim, VSTR &vs, bool bIncEmpty=true);
 size_t splitslist(const std::string &list, const std::string &delim, VSTR &vs, bool bIncEmpty=true);
-//size_t splitqslist(const std::string &list, char delim, VSTR &vs, bool bIncEmpty); todo quoted strings
+size_t splitsclist(const std::string &list, const std::string &delims, VSTR &vs, bool bIncEmpty=true); //on each char in delims
 void splitslen(const std::string &src, size_t len, VSTR &vs); //copy len-sized substrings from s to vs
 void splitslr(std::string s, char cdiv, std::string &l, std::string &r); //split s on first cdiv into l & r
 void splitslr(std::string s, const std::string &sdiv, std::string &l, std::string &r); //split s on first sdiv into l & r
@@ -575,7 +631,7 @@ bool GetSystemEnvironment(SystemEnvironment &SE);
 size_t MaxPathLength();
 
 #define FST int
-enum //FST - easier as generic int type
+enum //FST - easier if generic int type & not enum-type
 {
 	FST_UNKNOWN = 0,
 	FST_FILE = 1,
@@ -698,7 +754,7 @@ bool isdirempty(const std::string &D); //also false if D does not exist, or cann
 bool realizetree(const std::string &sdir, DirTree &tree); //creates dirs-only (?? cwd? or sdir must be abs?)
 std::string getrelativepathname(const std::string &sroot, const std::string &spath); //empty if spath not subdir of sroot
 
-#if defined(PLATFORM_POSIX) || defined(__linux__) || defined(unix) || defined(__unix__) || defined(__unix)
+#ifdef IS_LINUX
 	std::string getlinktarget(const std::string &slnk);
 #endif
 
@@ -1588,14 +1644,14 @@ struct Archive //container for mixed types
 
 
 //===================================================================================================
-#if defined(PLATFORM_POSIX) || defined(__linux__) || defined(unix) || defined(__unix__) || defined(__unix)
+#ifdef IS_LINUX
 template<typename...T> void _S_R_A_(const std::string &sc)
 	{
 		std::string s{};
 		s=says("nohup ", sc, " 1&2>/dev/null &");
 		std::system(s.c_str());
 	}
-#elif defined(_WIN64)
+#elif defined(IS_WINDOWS)
 template<typename...T> void _S_R_A_(const std::string &sc) //assuming windows - NOT TESTED!
 	{
 		std::string s{};
